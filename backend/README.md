@@ -34,3 +34,35 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+
+
+
+```
+
+---
+
+## Tous les fichiers restants à créer dans `app/api/`
+
+Voici la structure complète avec l'ordre de création :
+```
+app/api/
+├── upload/
+│   └── route.ts          ✅ déjà fait
+├── expenses/
+│   ├── route.ts          ← 2e fichier
+│   └── [id]/
+│       └── route.ts      ← 3e fichier
+├── auth/
+│   ├── register/
+│   │   └── route.ts      ← 4e fichier
+│   └── login/
+│       └── route.ts      ← 5e fichier
+├── admin/
+│   └── expenses/
+│       ├── route.ts      ← 6e fichier
+│       └── [id]/
+│           └── route.ts  ← 7e fichier
+└── pdf/
+    └── [id]/
+        └── route.ts      ← 8e fichier
