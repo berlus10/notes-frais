@@ -24,7 +24,7 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
             <Link 
               href="/login" 
-              className="flex-1 px-6 py-3 border border-cave-border text-cave-text-100 bg-cave-card rounded-xl font-semibold hover:bg-accent hover:shadow-glow-accent hover:text-cave-card transition-all text-center"
+              className="flex-1 px-6 py-3 border border-cave-border text-cave-text-100 bg-cave-card rounded-xl font-semibold hover:bg-green-600 hover:shadow-glow-accent hover:text-white transition-all text-center"
             >
               Connexion
             </Link>
@@ -39,28 +39,28 @@ export default function Home() {
       </div>
 
       <div className="grid md:grid-cols-3 gap-6 max-w-6xl w-full px-4">
-        <div className="cave-card p-8 rounded-2xl shadow-glow-card text-center hover:shadow-glow-accent hover:scale-105 transition-all duration-300">
-          <div className="w-16 h-16 bg-accent rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-glow-accent">
-            <span className="text-xl font-bold text-cave-card-alt">1</span>
+        <div className="bg-cave-card p-8 rounded-2xl shadow-glow-card text-center hover:shadow-glow-accent hover:scale-105 transition-all duration-300">
+          <div className="w-16 h-16 bg-green-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-glow-accent">
+            <span className="text-xl font-bold text-white">1</span>
           </div>
           <h3 className="text-xl font-bold text-cave-text-100 mb-2">Mission</h3>
           <p className="text-cave-text-400">Renseignez coordonnées et détails de mission</p>
         </div>
-        <div className="cave-card p-8 rounded-2xl shadow-glow-card text-center hover:shadow-glow-accent hover:scale-105 transition-all duration-300">
-          <div className="w-16 h-16 bg-accent rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-glow-accent">
-            <span className="text-xl font-bold text-cave-card-alt">2</span>
+        <div className="bg-cave-card p-8 rounded-2xl shadow-glow-card text-center hover:shadow-glow-accent hover:scale-105 transition-all duration-300">
+          <div className="w-16 h-16 bg-green-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-glow-accent">
+            <span className="text-xl font-bold text-white">2</span>
           </div>
           <h3 className="text-xl font-bold text-cave-text-100 mb-2">Dépenses</h3>
           <p className="text-cave-text-400">Calculs automatiques (km, repas, hôtel)</p>
         </div>
-        <div className="cave-card p-8 rounded-2xl shadow-glow-card text-center hover:shadow-glow-accent hover:scale-105 transition-all duration-300">
-          <div className="w-16 h-16 bg-accent rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-glow-accent">
-            <span className="text-xl font-bold text-cave-card-alt">3</span>
+        <div className="bg-cave-card p-8 rounded-2xl shadow-glow-card text-center hover:shadow-glow-accent hover:scale-105 transition-all duration-300">
+          <div className="w-16 h-16 bg-green-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-glow-accent">
+            <span className="text-xl font-bold text-white">3</span>
           </div>
           <h3 className="text-xl font-bold text-cave-text-100 mb-2">Justificatifs</h3>
           <p className="text-cave-text-400">Upload et capture photo instantanée</p>
         </div>
-        <div className="md:col-span-3 cave-card p-8 rounded-2xl shadow-glow-card text-center hover:shadow-glow-accent hover:scale-105 transition-all duration-300">
+        <div className="md:col-span-3 bg-cave-card p-8 rounded-2xl shadow-glow-card text-center hover:shadow-glow-accent hover:scale-105 transition-all duration-300">
           <div className="w-16 h-16 bg-green-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
             <span className="text-xl font-bold text-white">✓</span>
           </div>

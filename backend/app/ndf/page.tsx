@@ -1,14 +1,12 @@
 'use client';
 
-import { useEffect } from \'react\';
-import { useRouter } from \'next/navigation\';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function NDF() {
   const router = useRouter();
 
   useEffect(() => {
-    const token = localStorage.getItem(\'token\');
-    const userId = token || \'anonymous\';
     router.push(`/nouvelle-ndf`);
   }, [router]);
 
@@ -21,5 +19,4 @@ export default function NDF() {
     </main>
   );
 }
-
 

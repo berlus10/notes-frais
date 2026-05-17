@@ -1,163 +1,216 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 
-interface Expense {
-  id: number;
-  ref: string;
+type ApiUser = {
   nom: string;
-  total: number;
-  status: string;
-  createdAt: string;
-}
+  prenom: string;
+  email: string;
+};
+
+type ApiExpenseReport = {
+  id: string;
+  commission: string;
+  objet_action: string;
+  montant_total: string | number;
+  statut: string;
+  submitted_at?: string | null;
+  created_at: string;
+  user?: ApiUser | null;
+  expenses?: unknown[];
+};
+
+const euro = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' });
+
+const statusLabels: Record<string, string> = {
+  submitted: 'En attente',
+  approved: 'Validée',
+  rejected: 'Rejetée',
+  paid: 'Payée',
+  draft: 'Brouillon',
+};
 
 export default function Admin() {
-  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [reports, setReports] = useState<ApiExpenseReport[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
-  const [filterDate, setFilterDate] = useState('');
+  const [filterCommission, setFilterCommission] = useState('');
 
-  // Protect admin
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const userStr = localStorage.getItem('user');
-    const user = userStr ? JSON.parse(userStr) : null;
-    if (!token || !user?.role || user.role !== 'admin') {
-      window.location.href = '/login';
+    const loadReports = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const params = new URLSearchParams();
+        if (filterStatus) params.set('statut', filterStatus);
+        if (filterCommission) params.set('commission', filterCommission);
+
+        const res = await fetch(`/api/admin/expenses${params.toString() ? `?${params}` : ''}`, {
+          credentials: 'include',
+        });
+
+        if (res.status === 401 || res.status === 403) {
+          window.location.href = '/login';
+          return;
+        }
+
+        const json = await res.json();
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || 'Erreur chargement');
+        }
+
+        setReports(json.data ?? []);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Erreur chargement');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadReports();
+  }, [filterStatus, filterCommission]);
+
+  const commissions = useMemo(() => {
+    return Array.from(new Set(reports.map((report) => report.commission).filter(Boolean))).sort();
+  }, [reports]);
+
+  const updateStatus = async (id: string, action: 'approve' | 'reject' | 'paid') => {
+    setError('');
+    try {
+      const res = await fetch(`/api/admin/expenses/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          action,
+          commentaire: action === 'reject' ? 'Refusé par le trésorier' : undefined,
+        }),
+      });
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Mise à jour impossible');
+      }
+
+      setReports((current) =>
+        current.map((report) => (report.id === id ? { ...report, statut: json.data.statut } : report))
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur mise à jour');
     }
-  }, []);
-
-  useEffect(() => {
-    fetch('/api/admin/expenses')
-      .then(res => res.json())
-      .then(setExpenses)
-      .finally(() => setLoading(false));
-  }, []);
-
-  const updateStatus = async (id: number, status: string) => {
-    await fetch(`/api/admin/expenses/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status, comment: `Status changé vers ${status}` }),
-    });
-    setExpenses(expenses.map(e => e.id === id ? { ...e, status } : e));
   };
 
-  const filtered = expenses.filter(e => 
-    (!filterStatus || e.status === filterStatus) &&
-    (!filterDate || e.createdAt.startsWith(filterDate))
-  );
-
-  const SkeletonRow = () => (
-    <tr className="animate-pulse">
-      <td className="p-4"><div className="h-5 bg-cave-border rounded w-20"></div></td>
-      <td className="p-4"><div className="h-4 bg-cave-border rounded w-32"></div></td>
-      <td className="p-4"><div className="h-5 bg-cave-border rounded w-16"></div></td>
-      <td className="p-4"><div className="h-6 bg-cave-border rounded-full w-20 mx-auto"></div></td>
-      <td className="p-4"><div className="h-4 bg-cave-border rounded w-24"></div></td>
-      <td className="p-4 space-x-2"><div className="h-8 bg-cave-border rounded w-16"></div></td>
-    </tr>
-  );
-
   return (
-    <div className="min-h-screen py-8 px-4 bg-cave-bg">
+    <div className="min-h-screen py-8 px-4 bg-gray-50">
       <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-4xl font-black text-cave-text-100">Admin - Central de validation</h1>
-
-          <Link href="/dashboard" className="text-accent hover:text-accent-glow font-bold">← Dashboard personnel</Link>
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-8">
+          <div>
+            <h1 className="text-3xl md:text-4xl font-black text-black">Validation des notes de frais</h1>
+            <p className="mt-2 text-gray-600">Fédération Française de Spéléologie</p>
+          </div>
+          <Link href="/dashboard" className="text-black hover:underline font-bold">
+            Dashboard personnel
+          </Link>
         </div>
-        
-        {/* Filters */}
-        <div className="cave-card p-6 rounded-2xl shadow-glow-card mb-8">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <label className="block text-sm font-bold text-cave-text-400 mb-2">Filtrer par statut</label>
-              <select 
-                className="w-full px-4 py-3 bg-cave-card border border-cave-border rounded-xl text-cave-text-100 focus:ring-2 ring-accent focus:border-accent transition-all"
+
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 mb-6">
+          <div className="grid md:grid-cols-2 gap-4">
+            <label>
+              <span className="block text-sm font-bold text-gray-700 mb-2">Statut</span>
+              <select
+                className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl text-black"
                 value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
+                onChange={(event) => setFilterStatus(event.target.value)}
               >
-                <option value="">Tous statuts</option>
-                <option value="pending">En attente</option>
+                <option value="">Tous</option>
+                <option value="submitted">En attente</option>
                 <option value="approved">Validées</option>
                 <option value="rejected">Rejetées</option>
+                <option value="paid">Payées</option>
               </select>
-            </div>
-            <div className="flex-1">
-              <label className="block text-sm font-bold text-cave-text-400 mb-2">Filtrer par mois</label>
-              <input 
-                type="month" 
-                className="w-full px-4 py-3 bg-cave-card border border-cave-border rounded-xl text-cave-text-100 focus:ring-2 ring-accent focus:border-accent transition-all"
-                value={filterDate}
-                onChange={(e) => setFilterDate(e.target.value)}
-              />
-            </div>
+            </label>
+            <label>
+              <span className="block text-sm font-bold text-gray-700 mb-2">Commission</span>
+              <select
+                className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl text-black"
+                value={filterCommission}
+                onChange={(event) => setFilterCommission(event.target.value)}
+              >
+                <option value="">Toutes</option>
+                {commissions.map((commission) => (
+                  <option key={commission} value={commission}>
+                    {commission}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </div>
 
-        {/* Table */}
-        <div className="cave-card rounded-2xl shadow-glow-card overflow-hidden">
+        {error && <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 font-semibold text-red-700">{error}</div>}
+
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-cave-card-alt">
+            <table className="w-full min-w-[920px]">
+              <thead className="bg-gray-100 text-left text-sm font-black text-gray-700">
                 <tr>
-                  <th className="p-6 text-left text-cave-text-100 font-black text-lg border-b border-cave-border">Réf</th>
-                  <th className="p-6 text-left text-cave-text-100 font-black text-lg border-b border-cave-border">Collaborateur</th>
-                  <th className="p-6 text-right text-cave-text-100 font-black text-lg border-b border-cave-border">Montant</th>
-                  <th className="p-6 text-left text-cave-text-100 font-black text-lg border-b border-cave-border">Statut</th>
-                  <th className="p-6 text-left text-cave-text-100 font-black text-lg border-b border-cave-border">Date</th>
-                  <th className="p-6 text-left text-cave-text-100 font-black text-lg border-b border-cave-border">Actions</th>
+                  <th className="p-4">Référence</th>
+                  <th className="p-4">Membre</th>
+                  <th className="p-4">Mission</th>
+                  <th className="p-4 text-right">Montant</th>
+                  <th className="p-4">Statut</th>
+                  <th className="p-4">Soumise le</th>
+                  <th className="p-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <>
-                    <SkeletonRow />
-                    <SkeletonRow />
-                    <SkeletonRow />
-                    <SkeletonRow />
-                  </>
-                ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-12 text-center text-cave-text-400">
+                    <td colSpan={7} className="p-10 text-center text-gray-600">
+                      Chargement...
+                    </td>
+                  </tr>
+                ) : reports.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-10 text-center text-gray-600">
                       Aucune note de frais trouvée
                     </td>
                   </tr>
                 ) : (
-                  filtered.map(expense => (
-                    <tr key={expense.id} className="border-t border-cave-border hover:bg-cave-card hover:shadow-glow-accent transition-all duration-200">
-                      <td className="p-6 font-black text-cave-text-100">{expense.ref}</td>
-                      <td className="p-6 text-cave-text-400 capitalize">{expense.nom}</td>
-                      <td className="p-6 font-black text-cave-text-100 text-right">€{expense.total.toFixed(2)}</td>
-                      <td className="p-6">
-              <span className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${
-                expense.status === 'pending' ? 'bg-gray-200 text-black' :
-                expense.status === 'approved' ? 'bg-green-500 text-white' :
-                'bg-red-500 text-white'
-              }`}>
-                {expense.status}
-              </span>
-
+                  reports.map((report) => (
+                    <tr key={report.id} className="border-t border-gray-200">
+                      <td className="p-4 font-mono text-sm text-black">{report.id.slice(0, 8)}</td>
+                      <td className="p-4 text-black">
+                        {report.user ? `${report.user.prenom} ${report.user.nom}` : 'Sans compte'}
                       </td>
-                      <td className="p-6 text-cave-text-400">{new Date(expense.createdAt).toLocaleDateString('fr-FR')}</td>
-                      <td className="p-6">
-                        <div className="flex flex-col sm:flex-row gap-2">
-                          <Link href={`/admin/${expense.id}`} className="px-4 py-2 bg-accent text-cave-card rounded-xl font-bold hover:shadow-glow-pulse whitespace-nowrap">
+                      <td className="p-4">
+                        <div className="font-bold text-black">{report.objet_action}</div>
+                        <div className="text-sm text-gray-500">{report.commission}</div>
+                      </td>
+                      <td className="p-4 text-right font-black text-black">{euro.format(Number(report.montant_total))}</td>
+                      <td className="p-4">
+                        <span className="inline-flex rounded-full bg-gray-100 px-3 py-1 text-sm font-bold text-black">
+                          {statusLabels[report.statut] || report.statut}
+                        </span>
+                      </td>
+                      <td className="p-4 text-gray-700">
+                        {new Date(report.submitted_at || report.created_at).toLocaleDateString('fr-FR')}
+                      </td>
+                      <td className="p-4">
+                        <div className="flex justify-end gap-2">
+                          <Link href={`/admin/${report.id}`} className="px-3 py-2 rounded-lg border border-gray-300 text-black font-bold hover:bg-gray-100">
                             Détail
                           </Link>
-                          <button 
-                            onClick={() => updateStatus(expense.id, 'approved')}
-                            className="px-4 py-2 bg-status-approved text-status-approved-text rounded-xl font-bold hover:shadow-glow-pulse transition-all"
-                          >
-                             Valider
+                          <button onClick={() => updateStatus(report.id, 'approve')} className="px-3 py-2 rounded-lg bg-green-600 text-white font-bold hover:bg-green-700">
+                            Valider
                           </button>
-                          <button 
-                            onClick={() => updateStatus(expense.id, 'rejected')}
-                            className="px-4 py-2 bg-status-rejected text-status-rejected-text rounded-xl font-bold hover:shadow-glow-pulse transition-all"
-                          >
-                             Refuser
+                          <button onClick={() => updateStatus(report.id, 'reject')} className="px-3 py-2 rounded-lg bg-red-600 text-white font-bold hover:bg-red-700">
+                            Refuser
+                          </button>
+                          <button onClick={() => updateStatus(report.id, 'paid')} className="px-3 py-2 rounded-lg bg-black text-white font-bold hover:bg-gray-900">
+                            Payée
                           </button>
                         </div>
                       </td>
@@ -172,4 +225,3 @@ export default function Admin() {
     </div>
   );
 }
-

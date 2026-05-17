@@ -1,250 +1,235 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
 
-interface ExpenseData {
-  nom: string;
-  prenom: string;
-  objet: string;
-  dateDebut: string;
-  dateFin: string;
-  villeDebut?: string;
-  villeFin?: string;
-}
+type Report = {
+  id: string;
+  commission: string;
+  objet_action: string;
+  date_action: string;
+  ville_depart: string;
+  ville_arrivee: string;
+  montant_total: string | number;
+  statut: string;
+  commentaire?: string | null;
+  compte_analytique?: string | null;
+  ligne_objectif?: string | null;
+  piece_comptable?: string | null;
+  submitted_at?: string | null;
+  created_at: string;
+  user?: { nom: string; prenom: string; email: string } | null;
+  expenses: {
+    id: string;
+    categorie: string;
+    description: string;
+    montant: string | number;
+    montant_retenu: string | number;
+    justificatif_url?: string | null;
+    date_depense: string;
+  }[];
+};
 
-interface Expense {
-  id: number;
-  ref: string;
-  total: number;
-  status: string;
-  comment?: string;
-  files: string[];
-  data: ExpenseData;
-}
+const euro = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' });
 
 export default function AdminDetail() {
-  const params = useParams();
-  const id = Number(params.id);
-  const [expense, setExpense] = useState<Expense | null>(null);
+  const params = useParams<{ id: string }>();
+  const id = params.id;
+  const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
-  const [comment, setComment] = useState('');
-
-  // Protect admin detail
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    const userStr = localStorage.getItem('user');
-    const user = userStr ? JSON.parse(userStr) : null;
-    if (!token || !user?.role || user.role !== 'admin') {
-      window.location.href = '/login';
-    }
-  }, []);
+  const [error, setError] = useState('');
+  const [commentaire, setCommentaire] = useState('');
+  const [compteAnalytique, setCompteAnalytique] = useState('');
+  const [ligneObjectif, setLigneObjectif] = useState('');
+  const [pieceComptable, setPieceComptable] = useState('');
 
   useEffect(() => {
-    fetch(`/api/admin/expenses`)
-      .then(res => res.json())
-      .then((expenses: Expense[]) => {
-        const found = expenses.find(e => e.id === id);
-        setExpense(found || null);
-        setComment(found?.comment || '');
-      })
-      .finally(() => setLoading(false));
+    const load = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const res = await fetch('/api/admin/expenses', { credentials: 'include' });
+        if (res.status === 401 || res.status === 403) {
+          window.location.href = '/login';
+          return;
+        }
+        const json = await res.json();
+        if (!res.ok || !json.success) throw new Error(json.error || 'Erreur chargement');
+
+        const found = (json.data ?? []).find((item: Report) => item.id === id) ?? null;
+        setReport(found);
+        setCommentaire(found?.commentaire ?? '');
+        setCompteAnalytique(found?.compte_analytique ?? '');
+        setLigneObjectif(found?.ligne_objectif ?? '');
+        setPieceComptable(found?.piece_comptable ?? '');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Erreur chargement');
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
   }, [id]);
 
-  const updateStatus = async (status: string) => {
-    if (!expense) return;
+  const updateStatus = async (action: 'approve' | 'reject' | 'paid') => {
+    if (!report) return;
     setUpdating(true);
+    setError('');
     try {
-      await fetch(`/api/admin/expenses/${id}`, {
+      const res = await fetch(`/api/admin/expenses/${report.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status, comment }),
+        credentials: 'include',
+        body: JSON.stringify({
+          action,
+          commentaire,
+          compte_analytique: compteAnalytique,
+          ligne_objectif: ligneObjectif,
+          piece_comptable: pieceComptable,
+        }),
       });
-      setExpense({ ...expense, status });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Mise à jour impossible');
+      setReport({ ...report, statut: json.data.statut, commentaire, compte_analytique: compteAnalytique, ligne_objectif: ligneObjectif, piece_comptable: pieceComptable });
     } catch (err) {
-      console.error('Erreur update:', err);
+      setError(err instanceof Error ? err.message : 'Erreur mise à jour');
     } finally {
       setUpdating(false);
     }
   };
 
-  const getExpenseBreakdown = (data: any) => {
-    const breakdown = [];
-    if (data?.kmVoiture) breakdown.push({ label: 'Voiture', amount: data.kmVoiture * 0.36 });
-    if (data?.kmMoto) breakdown.push({ label: 'Moto', amount: data.kmMoto * 0.14 });
-    if (data?.kmCovoiturage) breakdown.push({ label: 'Covoiturage', amount: data.kmCovoiturage * 0.40 });
-    if (data?.hotel) breakdown.push({ label: 'Hôtel', amount: data.hotel });
-    if (data?.repas) breakdown.push({ label: 'Repas', amount: data.repas });
-    if (data?.autres) breakdown.push({ label: 'Autres', amount: data.autres });
-    return breakdown.length ? breakdown : [{ label: 'Total', amount: expense?.total || 0 }];
+  const generatePdf = async () => {
+    if (!report) return;
+    setUpdating(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/pdf/${report.id}`, { credentials: 'include' });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'PDF impossible');
+      window.open(json.data.pdf_url, '_blank');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur PDF');
+    } finally {
+      setUpdating(false);
+    }
   };
 
-  const SkeletonSection = ({ title }: { title: string }) => (
-    <div className="bg-white p-8 rounded-2xl shadow-lg animate-pulse">
-      <div className="h-8 bg-gray-200 rounded w-48 mb-6"></div>
-      <div className="space-y-4">
-        <div className="h-6 bg-gray-200 rounded w-full"></div>
-        <div className="h-6 bg-gray-200 rounded w-3/4"></div>
-        <div className="h-6 bg-gray-200 rounded w-1/2"></div>
-      </div>
-    </div>
-  );
-
   if (loading) {
+    return <div className="min-h-screen grid place-items-center bg-gray-50 text-black">Chargement...</div>;
+  }
+
+  if (!report) {
     return (
-      <div className="min-h-screen py-8 px-4 bg-gray-50">
-        <div className="max-w-4xl mx-auto space-y-8">
-          <SkeletonSection title="Header" />
-          <div className="grid md:grid-cols-2 gap-8">
-            <SkeletonSection title="Détails" />
-            <SkeletonSection title="Justificatifs" />
-          </div>
-          <SkeletonSection title="Actions" />
+      <div className="min-h-screen grid place-items-center bg-gray-50 p-4">
+        <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
+          <h1 className="text-2xl font-black text-black mb-4">Note introuvable</h1>
+          {error && <p className="mb-4 text-red-600">{error}</p>}
+          <Link href="/admin" className="font-bold text-black hover:underline">Retour admin</Link>
         </div>
       </div>
     );
   }
-
-  if (!expense) {
-    return (
-      <div className="min-h-screen py-8 px-4 bg-gray-50 flex items-center justify-center">
-        <div className="bg-white p-12 rounded-2xl shadow-lg text-center max-w-md border">
-          <h2 className="text-2xl font-bold text-black mb-4">NDF #{id} non trouvée</h2>
-          <Link href="/admin" className="bg-gray-600 text-white py-4 px-6 rounded-xl font-bold hover:bg-gray-700 transition-all">
-            Retour admin
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  const breakdown = getExpenseBreakdown(expense.data);
 
   return (
-    <div className="min-h-screen py-8 px-4 bg-gray-50">
-      <div className="max-w-4xl mx-auto space-y-8">
-        <div className="bg-white p-8 rounded-2xl shadow-lg border flex justify-between items-start">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
+      <div className="max-w-5xl mx-auto space-y-6">
+        <div className="bg-white rounded-2xl border border-gray-200 p-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
-            <Link href="/admin" className="inline-flex items-center gap-2 text-orange-500 hover:text-orange-600 mb-4 font-bold">
-              ← Retour liste
-            </Link>
-            <h1 className="text-3xl font-bold text-black">NDF #{expense.ref}</h1>
+            <Link href="/admin" className="font-bold text-black hover:underline">Retour admin</Link>
+            <h1 className="mt-3 text-3xl font-black text-black">{report.objet_action}</h1>
+            <p className="mt-2 text-gray-600">Référence {report.id}</p>
           </div>
-          <div className="text-right">
-            <p className="text-4xl font-bold text-black mb-4">€{expense.total.toFixed(2)}</p>
-            <span className={`px-4 py-2 rounded-full font-bold ${
-              expense.status === 'pending' ? 'bg-gray-200 text-black' :
-              expense.status === 'approved' ? 'bg-green-500 text-white' :
-              'bg-red-500 text-white'
-            }`}>
-              {expense.status}
-            </span>
+          <div className="md:text-right">
+            <p className="text-3xl font-black text-black">{euro.format(Number(report.montant_total))}</p>
+            <p className="mt-2 inline-flex rounded-full bg-gray-100 px-3 py-1 font-bold text-black">{report.statut}</p>
           </div>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8">
-          <div className="bg-white p-8 rounded-2xl shadow-lg border">
-            <h2 className="text-2xl font-bold text-black mb-6">Mission & utilisateur</h2>
-            <div className="space-y-4 text-lg">
-              <p><span className="font-bold text-orange-500">Nom:</span> {expense.data.nom || '-'} {expense.data.prenom || '-'}</p>
-              <p><span className="font-bold text-orange-500">Objet:</span> {expense.data.objet || '-'}</p>
-              <p><span className="font-bold text-orange-500">Dates:</span> {expense.data.dateDebut || '-'} → {expense.data.dateFin || '-'}</p>
-            </div>
-          </div>
+        {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 font-semibold text-red-700">{error}</div>}
 
-          <div className="bg-white p-8 rounded-2xl shadow-lg border">
-            <h2 className="text-2xl font-bold text-black mb-6">Dépenses</h2>
-            <div className="space-y-3">
-              {breakdown.map((item, i) => (
-                <div key={i} className="flex justify-between py-2 border-b border-gray-200 last:border-b-0">
-                  <span className="text-gray-800 font-medium">{item.label}</span>
-                  <span className="font-bold text-black">€{item.amount.toFixed(2)}</span>
-                </div>
-              ))}
-              <div className="mt-6 pt-4 border-t border-gray-200 bg-gray-50 p-4 rounded-xl">
-                <div className="flex justify-between text-2xl font-bold text-black">
-                  <span>Total</span>
-                  <span>€{expense.total.toFixed(2)}</span>
-                </div>
-              </div>
-            </div>
-          </div>
+        <div className="grid md:grid-cols-2 gap-6">
+          <section className="bg-white rounded-2xl border border-gray-200 p-6">
+            <h2 className="text-xl font-black text-black mb-4">Mission</h2>
+            <Info label="Commission" value={report.commission} />
+            <Info label="Date" value={new Date(report.date_action).toLocaleDateString('fr-FR')} />
+            <Info label="Trajet" value={`${report.ville_depart} → ${report.ville_arrivee}`} />
+            <Info label="Membre" value={report.user ? `${report.user.prenom} ${report.user.nom} (${report.user.email})` : 'Sans compte'} />
+          </section>
+
+          <section className="bg-white rounded-2xl border border-gray-200 p-6">
+            <h2 className="text-xl font-black text-black mb-4">Comptabilité</h2>
+            <Input label="Compte analytique" value={compteAnalytique} onChange={setCompteAnalytique} />
+            <Input label="Ligne objectif" value={ligneObjectif} onChange={setLigneObjectif} />
+            <Input label="Pièce comptable" value={pieceComptable} onChange={setPieceComptable} />
+          </section>
         </div>
 
-        <div className="bg-white p-8 rounded-2xl shadow-lg border">
-          <h2 className="text-2xl font-bold text-black mb-8">Justificatifs ({expense.files.length})</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-            {expense.files.map((file, i) => (
-              <div key={i} className="group relative aspect-video rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-all">
-                <Image 
-                  src={file} 
-                  alt={`Justificatif ${i+1}`}
-                  fill 
-                  className="object-cover group-hover:scale-110 transition-transform duration-300"
-                  onError={(e) => {
-                    const img = e.target as HTMLImageElement;
-                    img.style.display = 'none';
-                    const fallback = img.parentNode?.querySelector('.fallback-icon') as HTMLElement | null;
-                    if (fallback) fallback.style.display = 'flex';
-                  }}
-                />
-                <div className="absolute inset-0 bg-gray-900 flex items-center justify-center text-gray-400 hidden fallback-icon">
-                  <svg className="w-16 h-16" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
-                  </svg>
-                </div>
-                <div className="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-3 py-1 rounded-full truncate max-w-[140px]">
-                  {file.split('/').pop()?.slice(0,25) || `Fichier ${i+1}`}
-                </div>
-              </div>
-            ))}
+        <section className="bg-white rounded-2xl border border-gray-200 p-6">
+          <h2 className="text-xl font-black text-black mb-4">Dépenses</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px]">
+              <thead className="bg-gray-100 text-left text-sm font-bold text-gray-700">
+                <tr>
+                  <th className="p-3">Date</th>
+                  <th className="p-3">Catégorie</th>
+                  <th className="p-3">Description</th>
+                  <th className="p-3 text-right">Montant</th>
+                  <th className="p-3 text-right">Retenu</th>
+                  <th className="p-3">Justificatif</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.expenses.map((expense) => (
+                  <tr key={expense.id} className="border-t border-gray-200">
+                    <td className="p-3">{new Date(expense.date_depense).toLocaleDateString('fr-FR')}</td>
+                    <td className="p-3 capitalize">{expense.categorie}</td>
+                    <td className="p-3">{expense.description}</td>
+                    <td className="p-3 text-right">{euro.format(Number(expense.montant))}</td>
+                    <td className="p-3 text-right font-bold">{euro.format(Number(expense.montant_retenu))}</td>
+                    <td className="p-3">
+                      {expense.justificatif_url ? <a href={expense.justificatif_url} target="_blank" className="font-bold text-black hover:underline">Ouvrir</a> : '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
+        </section>
 
-        <div className="bg-white p-8 rounded-2xl shadow-lg border">
-          <h2 className="text-2xl font-bold text-black mb-6">Actions</h2>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-lg font-bold text-black mb-2">Commentaire</label>
-              <textarea
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                placeholder="Commentaire ou motif de rejet..."
-                className="w-full p-4 border border-gray-300 rounded-xl text-black resize-vertical min-h-[100px] focus:ring-2 focus:ring-black focus:border-black"
-                rows={4}
-                disabled={updating}
-              />
-            </div>
-            <div className="flex gap-4 pt-4">
-              <button 
-                onClick={() => updateStatus('approved')}
-                className="flex-1 bg-green-600 text-white py-4 px-6 rounded-xl font-bold hover:bg-green-700 transition-all disabled:opacity-50"
-                disabled={updating}
-              >
-                Approuver
-              </button>
-              <button 
-                onClick={() => updateStatus('rejected')}
-                className="flex-1 bg-red-600 text-white py-4 px-6 rounded-xl font-bold hover:bg-red-700 transition-all disabled:opacity-50"
-                disabled={updating}
-              >
-                Rejeter
-              </button>
-              <button className="px-6 py-4 bg-gray-600 text-white rounded-xl font-bold hover:bg-gray-700 transition-all">
-                PDF
-              </button>
-            </div>
+        <section className="bg-white rounded-2xl border border-gray-200 p-6">
+          <h2 className="text-xl font-black text-black mb-4">Décision</h2>
+          <label className="block">
+            <span className="block text-sm font-bold text-black mb-2">Commentaire</span>
+            <textarea value={commentaire} onChange={(event) => setCommentaire(event.target.value)} rows={4} className="w-full rounded-xl border border-gray-300 p-3 text-black" />
+          </label>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <button disabled={updating} onClick={() => updateStatus('approve')} className="px-5 py-3 rounded-xl bg-green-600 text-white font-bold disabled:opacity-50">Valider</button>
+            <button disabled={updating} onClick={() => updateStatus('reject')} className="px-5 py-3 rounded-xl bg-red-600 text-white font-bold disabled:opacity-50">Rejeter</button>
+            <button disabled={updating} onClick={() => updateStatus('paid')} className="px-5 py-3 rounded-xl bg-black text-white font-bold disabled:opacity-50">Marquer payée</button>
+            <button disabled={updating} onClick={generatePdf} className="px-5 py-3 rounded-xl border border-gray-300 text-black font-bold disabled:opacity-50">Générer PDF</button>
           </div>
-        </div>
-
-        <div className="text-center">
-          <p className="text-gray-600 text-sm">Créée le {new Date(expense.createdAt).toLocaleDateString()}</p>
-        </div>
+        </section>
       </div>
     </div>
   );
 }
 
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <p className="mb-3 text-gray-800">
+      <span className="font-bold text-black">{label} : </span>
+      {value}
+    </p>
+  );
+}
+
+function Input({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="mb-3 block">
+      <span className="block text-sm font-bold text-black mb-2">{label}</span>
+      <input value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-xl border border-gray-300 p-3 text-black" />
+    </label>
+  );
+}

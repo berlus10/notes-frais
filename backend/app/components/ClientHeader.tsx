@@ -1,80 +1,98 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+
+type HeaderUser = {
+  email: string;
+  role: 'user' | 'admin';
+  nom?: string;
+  prenom?: string;
+};
 
 export default function ClientHeader() {
   const [mounted, setMounted] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<HeaderUser | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-    const u = localStorage.getItem("user");
-    if (u) setUser(JSON.parse(u));
+    const localUser = localStorage.getItem('user');
+    if (localUser) {
+      try {
+        setUser(JSON.parse(localUser));
+      } catch {
+        localStorage.removeItem('user');
+      }
+    }
+
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (json?.success) {
+          setUser(json.data);
+          localStorage.setItem('user', JSON.stringify(json.data));
+        }
+      })
+      .catch(() => undefined);
   }, []);
 
-  if (!mounted) {
-    return (
-      <header className="fixed top-0 left-0 right-0 z-50 bg-cave-card-alt border-b-cave-border shadow-glow-card h-16" />
-    );
-  }
-
-  const logout = () => {
-    localStorage.removeItem("user");
-    localStorage.removeItem("token");
-    window.location.href = "/";
+  const logout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => undefined);
+    localStorage.removeItem('user');
+    setUser(null);
+    window.location.href = '/';
   };
 
+  if (!mounted) {
+    return <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-black" />;
+  }
+
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-[#111111] border-b-[#2a2a2a] shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-black border-b border-gray-800 shadow-lg">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          <Link href="/" className="text-white text-2xl font-black flex items-center gap-2 hover:text-[#fb923c] transition-colors">
-            BANG
-            <span className="text-gray-400 text-sm font-light">Notes de frais</span>
+          <Link href="/" className="text-white text-lg md:text-xl font-black flex items-center gap-2 hover:text-gray-200">
+            FFS
+            <span className="text-gray-400 text-sm font-semibold">Notes de frais spéléologie</span>
           </Link>
 
           <nav className="hidden md:flex items-center gap-6">
-            <Link href="/dashboard" className="text-white hover:text-[#fb923c] hover:underline font-medium transition-all">Dashboard</Link>
-            <Link href="/nouvelle-ndf" className="text-white hover:text-[#fb923c] hover:underline font-medium transition-all">Nouvelle NDF</Link>
+            <Link href="/dashboard" className="text-white hover:underline font-medium">Dashboard</Link>
+            <Link href="/nouvelle-ndf" className="text-white hover:underline font-medium">Nouvelle NDF</Link>
             {user?.role === 'admin' && (
-              <Link href="/admin" className="text-white hover:text-[#fb923c] hover:underline font-medium transition-all">Admin</Link>
+              <Link href="/admin" className="text-white hover:underline font-medium">Admin</Link>
             )}
           </nav>
 
           <div className="flex items-center gap-4">
             {user ? (
               <div className="relative">
-                <button 
-                  onClick={() => setIsMenuOpen(!isMenuOpen)}
-                  className="w-10 h-10 bg-[#2a2a2a] rounded-full flex items-center justify-center text-white hover:text-[#fb923c] hover:ring-2 ring-[#d97706] hover:shadow-[0_0_20px_rgba(217,119,6,0.3)] transition-all"
+                <button
+                  onClick={() => setIsMenuOpen((open) => !open)}
+                  className="h-10 w-10 rounded-full bg-white text-black font-black"
+                  aria-label="Menu utilisateur"
                 >
-                  {user.email?.[0]?.toUpperCase() || 'U'}
+                  {(user.prenom?.[0] || user.email?.[0] || 'U').toUpperCase()}
                 </button>
                 {isMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-[#1a1a1a] border-[#2a2a2a] rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.3)] py-2">
-                    <Link href="/dashboard" className="block px-4 py-2 text-white hover:bg-[#1a1a1a] hover:text-[#fb923c]">Dashboard</Link>
-                    {user.role === 'admin' && (
-                      <Link href="/admin" className="block px-4 py-2 text-white hover:bg-[#1a1a1a] hover:text-[#fb923c]">Admin</Link>
-                    )}
-                    <button onClick={logout} className="w-full text-left px-4 py-2 text-white hover:bg-[#1a1a1a] hover:text-[#fb923c]">Déconnexion</button>
+                  <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-xl shadow-xl py-2">
+                    <div className="px-4 py-2 border-b border-gray-100">
+                      <p className="font-bold text-black truncate">{user.prenom} {user.nom}</p>
+                      <p className="text-sm text-gray-600 truncate">{user.email}</p>
+                    </div>
+                    <Link href="/dashboard" className="block px-4 py-2 text-black hover:bg-gray-100">Dashboard</Link>
+                    {user.role === 'admin' && <Link href="/admin" className="block px-4 py-2 text-black hover:bg-gray-100">Admin</Link>}
+                    <button onClick={logout} className="w-full text-left px-4 py-2 text-black hover:bg-gray-100">Déconnexion</button>
                   </div>
                 )}
               </div>
             ) : (
-              <Link 
-                href="/login" 
-                className="text-white hover:text-[#111111] px-4 py-2 rounded-lg hover:bg-[#d97706] hover:text-[#111111] transition-all font-medium"
-              >
+              <Link href="/login" className="text-white border border-white/30 px-4 py-2 rounded-lg hover:bg-white hover:text-black font-medium">
                 Connexion
               </Link>
             )}
           </div>
-
-          <button className="md:hidden p-1">
-            <span className="text-white">☰</span>
-          </button>
         </div>
       </div>
     </header>

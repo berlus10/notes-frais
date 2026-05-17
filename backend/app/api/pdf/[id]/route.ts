@@ -353,7 +353,7 @@ export async function GET(
 
     // Générer le PDF
     const pdfBuffer = await renderToBuffer(
-      React.createElement(NdfDocument, { report })
+      React.createElement(NdfDocument, { report }) as Parameters<typeof renderToBuffer>[0]
     )
 
     // Uploader le PDF sur R2
