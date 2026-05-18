@@ -1,32 +1,21 @@
-import type { Metadata } from "next";
-import "./globals.css";
-import ClientHeader from './components/ClientHeader';
-import { Inter } from 'next/font/google';
-
-const inter = Inter({ 
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: 'swap',
-});
+import type { Metadata } from 'next'
+import './globals.css'
 
 export const metadata: Metadata = {
-  title: "BANG - Notes de frais",
-  description: "Gestion spéléo des notes de frais",
-};
+  title: 'Notes de Frais — FFS/EFS',
+  description: 'Gestion des notes de frais de la Fédération Française de Spéléologie',
+}
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: {
+  children: React.ReactNode
+}) {
   return (
-    <html lang="fr" className={`${inter.variable} h-full antialiased font-sans`}>
-      <body className="min-h-screen flex flex-col pt-16">
-        <ClientHeader />
-        <main className="flex-1">
-          {children}
-        </main>
+    <html lang="fr">
+      <body className="min-h-screen" style={{ background: '#f4f8e8' }}>
+        {children}
       </body>
     </html>
-  );
+  )
 }

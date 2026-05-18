@@ -1,124 +1,121 @@
-'use client';
+'use client'
 
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-
-const loginSchema = z.object({
-  email: z.string().email("Email invalide"),
-  password: z.string().min(1, "Mot de passe requis"),
-});
-
-type LoginForm = z.infer<typeof loginSchema>;
+import { useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import Header from '../components/Header'
+import Footer from '../components/Footer'
 
 export default function Login() {
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
+  const router = useRouter()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const form = useForm<LoginForm>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
-  });
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
 
-  const onSubmit = async (data: LoginForm) => {
-    setLoading(true);
-    setError("");
-
-    // Mock admin login (keep simple)
-    if (data.email === "admin@test.com" && data.password === "1234") {
-      localStorage.setItem("token", "mock-admin-token");
-      localStorage.setItem("user", JSON.stringify({ email: data.email, role: "admin" }));
-      router.push("/admin");
-      return;
-    }
-
-    // Try API auth
     try {
-      const res = await fetch("/api/auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "login", email: data.email, password: data.password }),
-      });
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+      const data = await res.json()
 
-      if (res.ok) {
-        const { token, user } = await res.json();
-        localStorage.setItem("token", token);
-        localStorage.setItem("user", JSON.stringify(user));
-        router.push("/nouvelle-ndf");
-      } else {
-        setError("Identifiants incorrects");
+      if (!data.success) {
+        setError(data.error || 'Identifiants incorrects')
+        return
       }
-    } catch (err) {
-      setError("Erreur connexion");
+
+      if (data.data.user.role === 'admin') {
+        router.push('/admin')
+      } else {
+        router.push('/dashboard')
+      }
+    } catch {
+      setError('Erreur serveur, réessayez')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-12">
-      <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl border border-gray-200 p-10 space-y-8">
-        <div className="text-center">
-          <h1 className="text-4xl font-black text-black mb-4">Connexion BANG</h1>
-          <p className="text-lg text-black">
-            Admin test: <strong>admin@test.com</strong> / <strong>1234</strong>
-          </p>
-          <p className="text-sm text-black mt-2">Ou créez un compte lors soumission NDF</p>
-        </div>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <Header />
 
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          <div>
-            <label className="block text-lg font-bold text-black mb-3">Email</label>
-            <input 
-              type="email"
-              {...form.register("email")}
-              className="w-full px-5 py-4 border-2 border-gray-300 rounded-2xl text-lg font-semibold shadow-inner focus:outline-none focus:ring-4 focus:ring-black focus:border-black placeholder-gray-400 transition-all"
-              placeholder="admin@test.com"
-            />
-            {form.formState.errors.email && (
-              <p className="text-red-600 text-sm mt-2 ml-1">{form.formState.errors.email.message}</p>
-            )}
+      <main style={{ flex: 1, background: '#f4f8e8', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 20px' }}>
+        <div style={{ background: 'white', borderRadius: '12px', border: '0.5px solid #d8e4a8', padding: '32px', width: '100%', maxWidth: '400px' }}>
+
+          <div style={{ marginBottom: '22px' }}>
+            <h1 style={{ fontSize: '20px', fontWeight: '500', color: '#1a2e0a', margin: 0 }}>Connexion</h1>
+            <p style={{ fontSize: '13px', color: '#5a6e3a', marginTop: '4px', marginBottom: 0 }}>Accédez à votre espace membres FFS/EFS</p>
+            <div style={{ height: '2px', background: 'linear-gradient(90deg, #A6C630, #B3D280)', borderRadius: '2px', marginTop: '14px' }}></div>
           </div>
 
-          <div>
-            <label className="block text-lg font-bold text-black mb-3">Mot de passe</label>
-            <input 
-              type="password"
-              {...form.register("password")}
-              className="w-full px-5 py-4 border-2 border-gray-300 rounded-2xl text-lg font-semibold shadow-inner focus:outline-none focus:ring-4 focus:ring-black focus:border-black placeholder-gray-400 transition-all"
-              placeholder="1234"
-            />
-            {form.formState.errors.password && (
-              <p className="text-red-600 text-sm mt-2 ml-1">{form.formState.errors.password.message}</p>
+          <form onSubmit={handleSubmit}>
+            {error && (
+              <div style={{ background: '#fef2f2', border: '0.5px solid #fca5a5', color: '#dc2626', padding: '10px 14px', borderRadius: '8px', fontSize: '13px', marginBottom: '16px' }}>
+                {error}
+              </div>
             )}
-          </div>
 
-          {error && (
-            <div className="p-4 bg-red-100 border-2 border-red-400 text-red-800 rounded-2xl font-bold text-center">
-              {error}
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: '500', color: '#5a6e3a', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
+                Adresse email
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                placeholder="votre@email.com"
+                style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #d8e4a8', borderRadius: '8px', fontSize: '13px', background: '#f4f8e8', color: '#1a2e0a', outline: 'none' }}
+                onFocus={e => (e.target.style.borderColor = '#A6C630')}
+                onBlur={e => (e.target.style.borderColor = '#d8e4a8')}
+              />
             </div>
-          )}
 
-          <button 
-            type="submit"
-            disabled={loading}
-            className="w-full bg-black text-white py-5 px-8 rounded-2xl font-bold text-xl hover:bg-gray-900 shadow-2xl hover:shadow-3xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {loading ? "Connexion..." : "Se connecter"}
-          </button>
-        </form>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: '500', color: '#5a6e3a', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
+                Mot de passe
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                placeholder="••••••••"
+                style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #d8e4a8', borderRadius: '8px', fontSize: '13px', background: '#f4f8e8', color: '#1a2e0a', outline: 'none' }}
+                onFocus={e => (e.target.style.borderColor = '#A6C630')}
+                onBlur={e => (e.target.style.borderColor = '#d8e4a8')}
+              />
+            </div>
 
-        <div className="text-center space-y-4 pt-6 border-t border-gray-200">
-          <a href="/nouvelle-ndf" className="block text-black hover:underline font-semibold">
-            Accès sans compte → Nouvelle NDF
-          </a>
-          <a href="/" className="text-black hover:underline font-semibold">← Accueil</a>
+            <button
+              type="submit"
+              disabled={loading}
+              style={{ width: '100%', background: loading ? '#B3D280' : '#A6C630', color: '#1a2e0a', padding: '12px', borderRadius: '8px', fontSize: '14px', fontWeight: '500', border: 'none', cursor: loading ? 'not-allowed' : 'pointer' }}
+            >
+              {loading ? 'Connexion...' : 'Se connecter'}
+            </button>
+          </form>
+
+          <div style={{ textAlign: 'center', marginTop: '18px', paddingTop: '16px', borderTop: '0.5px solid #d8e4a8', fontSize: '13px', color: '#5a6e3a', lineHeight: '2' }}>
+            <Link href="/mot-de-passe-oublie" style={{ color: '#7a9420', textDecoration: 'none' }}>Mot de passe oublié ?</Link>
+            <br />
+            Pas encore de compte ?{' '}
+            <Link href="/register" style={{ color: '#7a9420', fontWeight: '500', textDecoration: 'none' }}>S&apos;inscrire</Link>
+            <br />
+            <Link href="/nouvelle-ndf" style={{ color: '#7a9420', textDecoration: 'none' }}>Accès sans compte → Nouvelle NDF</Link>
+          </div>
         </div>
-      </div>
-    </main>
-  );
-}
+      </main>
 
+      <Footer />
+    </div>
+  )
+}

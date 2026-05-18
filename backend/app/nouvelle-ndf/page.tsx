@@ -1,385 +1,389 @@
-'use client';
+'use client'
 
-import { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useForm, useWatch } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Header from '../components/Header'
+import Footer from '../components/Footer'
 
-const step1Schema = z.object({
-  nom: z.string().min(1, "Nom requis"),
-  prenom: z.string().min(1, "Prénom requis"),
-  adresse: z.string().min(1, "Adresse requise"),
-  telephone: z.string().regex(/^[\+]?[0-9\s\-\(\)]{10,}$/, "Téléphone valide requis"),
-  objet: z.string().min(1, "Objet requis"),
-  dateDebut: z.string().min(1),
-  dateFin: z.string().min(1),
-  villeDepart: z.string().min(1),
-  villeArrivee: z.string().min(1),
-});
-
-const step2Schema = z.object({
-  kmVoiture: z.number().min(0).optional(),
-  kmMoto: z.number().min(0).optional(),
-  kmCovoiturage: z.number().min(0).optional(),
-  hotel: z.number().min(0).optional(),
-  repas: z.number().min(0).max(25, "Repas max 25€/jour"),
-  autres: z.number().min(0).optional(),
-});
-
-type Step1Data = z.infer<typeof step1Schema>;
-type Step2Data = z.infer<typeof step2Schema>;
-type Step3Data = { files: string[] };
-
-interface FormData {
-  step1: Step1Data;
-  step2: Step2Data;
-  step3: Step3Data;
+interface Depense {
+  categorie: string
+  description: string
+  montant: number
+  date_depense: string
+  km?: number
 }
+
+const CATEGORIES = [
+  { value: 'voiture', label: 'Voiture (0,36 €/km)' },
+  { value: 'moto', label: 'Moto (0,14 €/km)' },
+  { value: 'train', label: 'Train' },
+  { value: 'bus', label: 'Bus' },
+  { value: 'avion', label: 'Avion' },
+  { value: 'hotel', label: 'Hôtel (plafond 100 €)' },
+  { value: 'repas', label: 'Repas (plafond 25 €)' },
+  { value: 'autre', label: 'Autre' },
+]
 
 export default function NouvelleNDF() {
-  const [currentStep, setCurrentStep] = useState(1);
-  const [files, setFiles] = useState<string[]>([]);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [total, setTotal] = useState(0);
-  const [repasAlert, setRepasAlert] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const router = useRouter();
+  const router = useRouter()
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [justificatifs, setJustificatifs] = useState<Record<number, string[]>>({})
+  const [uploadLoading, setUploadLoading] = useState<Record<number, boolean>>({})
 
-  const step1Form = useForm<Step1Data>({
-    resolver: zodResolver(step1Schema),
-    defaultValues: {
-      nom: "", prenom: "", adresse: "", telephone: "", objet: "",
-      dateDebut: "", dateFin: "", villeDepart: "", villeArrivee: ""
+  const [form, setForm] = useState({
+    nom: '',
+    prenom: '',
+    email: '',
+    commission: '',
+    objet_action: '',
+    date_action: '',
+    ville_depart: '',
+    ville_arrivee: '',
+  })
+
+  const [depenses, setDepenses] = useState<Depense[]>([
+    { categorie: 'voiture', description: '', montant: 0, date_depense: '', km: 0 }
+  ])
+
+  function handleFormChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
+    setForm({ ...form, [e.target.name]: e.target.value })
+  }
+
+  function handleDepenseChange(index: number, field: string, value: string | number) {
+    const updated = [...depenses]
+    updated[index] = { ...updated[index], [field]: value }
+
+    const cat = updated[index].categorie
+    const rate = cat === 'voiture' ? 0.36 : cat === 'moto' ? 0.14 : 0
+
+    if (field === 'km' && rate > 0) {
+      updated[index].montant = Number(value) * rate
     }
-  });
-
-  const step2Form = useForm<Step2Data>({
-    resolver: zodResolver(step2Schema),
-    defaultValues: { kmVoiture: 0, kmMoto: 0, kmCovoiturage: 0, hotel: 0, repas: 0, autres: 0 }
-  });
-
-  const kmVoiture = useWatch({ control: step2Form.control, name: "kmVoiture" }) || 0;
-  const kmMoto = useWatch({ control: step2Form.control, name: "kmMoto" }) || 0;
-  const kmCovoiturage = useWatch({ control: step2Form.control, name: "kmCovoiturage" }) || 0;
-  const hotel = useWatch({ control: step2Form.control, name: "hotel" }) || 0;
-  const repas = useWatch({ control: step2Form.control, name: "repas" }) || 0;
-  const autres = useWatch({ control: step2Form.control, name: "autres" }) || 0;
-
-  useEffect(() => {
-    const transport = kmVoiture * 0.36 + kmMoto * 0.14 + kmCovoiturage * 0.40;
-    const newTotal = transport + hotel + repas + autres;
-    setTotal(newTotal);
-    setRepasAlert(repas > 25);
-  }, [kmVoiture, kmMoto, kmCovoiturage, hotel, repas, autres]);
-
-  const nextStep = () => {
-    if (currentStep === 1) {
-      step1Form.handleSubmit((data) => setCurrentStep(2))();
-    } else if (currentStep === 2) {
-      step2Form.handleSubmit((data) => setCurrentStep(3))();
-    } else if (currentStep === 3) {
-      setCurrentStep(4);
+    if (field === 'categorie' && (value === 'voiture' || value === 'moto')) {
+      const newRate = value === 'voiture' ? 0.36 : 0.14
+      updated[index].montant = Number(updated[index].km || 0) * newRate
     }
-  };
 
-  const prevStep = () => setCurrentStep((s) => Math.max(s - 1, 1));
+    setDepenses(updated)
+  }
 
-  const addFile = async (fileUrl: string) => {
-    setFiles(prev => [...prev, fileUrl]);
-  };
+  function addDepense() {
+    setDepenses([...depenses, { categorie: 'repas', description: '', montant: 0, date_depense: '' }])
+  }
 
-  const removeFile = (index: number) => {
-    setFiles(prev => prev.filter((_, i) => i !== index));
-  };
+  function removeDepense(index: number) {
+    if (depenses.length === 1) return
+    setDepenses(depenses.filter((_, i) => i !== index))
+  }
 
-  const captureCamera = async () => {
+  async function handleUpload(index: number, file: File) {
+    setUploadLoading(prev => ({ ...prev, [index]: true }))
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-      if (videoRef.current) videoRef.current.srcObject = stream;
-      
-      setTimeout(async () => {
-        if (canvasRef.current && videoRef.current) {
-          canvasRef.current.width = videoRef.current.videoWidth;
-          canvasRef.current.height = videoRef.current.videoHeight;
-          const ctx = canvasRef.current.getContext("2d");
-          ctx?.drawImage(videoRef.current, 0, 0);
-          const dataUrl = canvasRef.current.toDataURL("image/jpeg");
-          
-          try {
-            const res = await fetch("/api/upload", {
-              method: "POST",
-              headers: {"Content-Type": "application/json"},
-              body: JSON.stringify({ preview: dataUrl }),
-            });
-            const data = await res.json();
-            addFile(data.url || dataUrl);
-          } catch {
-            addFile(dataUrl);
-          }
-          
-          stream.getTracks().forEach(track => track.stop());
-          videoRef.current!.srcObject = null;
-        }
-      }, 2000);
-    } catch (err) {
-      setError("Accès caméra refusé");
-    }
-  };
-
-  const handleSubmit = async () => {
-    setLoading(true);
-    try {
-      const step1Data = step1Form.getValues();
-      const step2Data = step2Form.getValues();
-      const token = localStorage.getItem("token") || "anonymous";
-      
-      const res = await fetch("/api/expenses", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-          data: { ...step1Data, ...step2Data },
-          files,
-          total,
-          userId: token,
-        }),
-      });
-
-      if (!res.ok) throw new Error("Erreur soumission");
-      
-      const { expense } = await res.json();
-      router.push(`/confirmation?ref=${expense.ref}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur");
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (data.success) {
+        setJustificatifs(prev => ({
+          ...prev,
+          [index]: [...(prev[index] || []), data.data.url],
+        }))
+      }
+    } catch {
+      console.error('Erreur upload')
     } finally {
-      setLoading(false);
+      setUploadLoading(prev => ({ ...prev, [index]: false }))
     }
-  };
+  }
 
-  const StepContent = () => {
-    switch (currentStep) {
-      case 1:
-        return (
-          <form onSubmit={step1Form.handleSubmit(() => {})}>
-            <div className="grid md:grid-cols-2 gap-6 space-y-6">
-              <div>
-                <label className="block text-lg font-bold text-black mb-3">Nom *</label>
-                <input {...step1Form.register("nom")} className="w-full p-4 border border-gray-300 rounded-xl bg-white text-black placeholder:text-gray-500 focus:ring-2 focus:ring-black focus:border-black outline-none text-xl shadow-inner" />
-                {step1Form.formState.errors.nom && <p className="text-red-600 mt-1">{step1Form.formState.errors.nom.message}</p>}
-              </div>
-              <div>
-                <label className="block text-lg font-bold text-black mb-3">Prénom *</label>
-                <input {...step1Form.register("prenom")} className="w-full p-4 border border-gray-300 rounded-xl bg-white text-black placeholder:text-gray-500 focus:ring-2 focus:ring-black focus:border-black outline-none text-xl shadow-inner" />
-                {step1Form.formState.errors.prenom && <p className="text-red-600 mt-1">{step1Form.formState.errors.prenom.message}</p>}
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-lg font-bold text-black mb-3">Adresse *</label>
-                <input {...step1Form.register("adresse")} className="w-full p-4 border border-gray-300 rounded-xl bg-white text-black placeholder:text-gray-500 focus:ring-2 focus:ring-black focus:border-black outline-none text-xl shadow-inner" />
-              </div>
-              <div>
-                <label className="block text-lg font-bold text-black mb-3">Téléphone *</label>
-                <input {...step1Form.register("telephone")} className="w-full p-4 border border-gray-300 rounded-xl bg-white text-black placeholder:text-gray-500 focus:ring-2 focus:ring-black focus:border-black outline-none text-xl shadow-inner" />
-              </div>
-              <div className="md:col-span-2 grid md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-lg font-bold text-black mb-3">Date début *</label>
-                  <input type="date" {...step1Form.register("dateDebut")} className="w-full p-4 border border-gray-300 rounded-xl bg-white text-black placeholder:text-gray-500 focus:ring-2 focus:ring-black focus:border-black outline-none text-xl shadow-inner" />
-                </div>
-                <div>
-                  <label className="block text-lg font-bold text-black mb-3">Date fin *</label>
-                  <input type="date" {...step1Form.register("dateFin")} className="w-full p-4 border border-gray-300 rounded-xl bg-white text-black placeholder:text-gray-500 focus:ring-2 focus:ring-black focus:border-black outline-none text-xl shadow-inner" />
-                </div>
-              </div>
-              <div className="md:col-span-2 grid md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-lg font-bold text-black mb-3">Ville départ *</label>
-                  <input {...step1Form.register("villeDepart")} className="w-full p-4 border border-gray-300 rounded-xl bg-white text-black placeholder:text-gray-500 focus:ring-2 focus:ring-black focus:border-black outline-none text-xl shadow-inner" />
-                </div>
-                <div>
-                  <label className="block text-lg font-bold text-black mb-3">Ville arrivée *</label>
-                  <input {...step1Form.register("villeArrivee")} className="w-full p-4 border border-gray-300 rounded-xl bg-white text-black placeholder:text-gray-500 focus:ring-2 focus:ring-black focus:border-black outline-none text-xl shadow-inner" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-lg font-bold text-black mb-3">Objet *</label>
-                <input {...step1Form.register("objet")} className="w-full p-4 border border-gray-300 rounded-xl bg-white text-black placeholder:text-gray-500 focus:ring-2 focus:ring-black focus:border-black outline-none text-xl shadow-inner" />
-              </div>
-            </div>
-          </form>
-        );
+  function removeJustificatif(expIndex: number, fileIndex: number) {
+    setJustificatifs(prev => ({
+      ...prev,
+      [expIndex]: (prev[expIndex] || []).filter((_, i) => i !== fileIndex),
+    }))
+  }
 
-      case 2:
-        return (
-          <form onSubmit={step2Form.handleSubmit(() => {})}>
-            <h3 className="text-xl font-bold text-black mb-6">Transport (calcul auto)</h3>
-            <div className="grid md:grid-cols-3 gap-6 mb-8">
-              <div>
-                <label className="block text-lg font-bold text-black mb-2">Voiture (km × 0.36€)</label>
-                <input type="number" step="0.1" min="0" {...step2Form.register("kmVoiture", { valueAsNumber: true })} className="w-full p-4 border border-gray-300 rounded-xl bg-white text-black placeholder:text-gray-500 focus:ring-2 focus:ring-black focus:border-black outline-none text-xl shadow-inner" />
-              </div>
-              <div>
-                <label className="block text-lg font-bold text-black mb-2">Moto (km × 0.14€)</label>
-                <input type="number" step="0.1" min="0" {...step2Form.register("kmMoto", { valueAsNumber: true })} className="w-full p-4 border border-gray-300 rounded-xl bg-white text-black placeholder:text-gray-500 focus:ring-2 focus:ring-black focus:border-black outline-none text-xl shadow-inner" />
-              </div>
-              <div>
-                <label className="block text-lg font-bold text-black mb-2">Covoit. (km × 0.40€)</label>
-                <input type="number" step="0.1" min="0" {...step2Form.register("kmCovoiturage", { valueAsNumber: true })} className="w-full p-4 border border-gray-300 rounded-xl bg-white text-black placeholder:text-gray-500 focus:ring-2 focus:ring-black focus:border-black outline-none text-xl shadow-inner" />
-              </div>
-            </div>
-            <div className="grid md:grid-cols-2 gap-6 space-y-6">
-              <div>
-                <label className="block text-lg font-bold text-black mb-2">Hôtel</label>
-                <input type="number" step="0.01" min="0" {...step2Form.register("hotel", { valueAsNumber: true })} className="w-full p-4 border border-gray-300 rounded-xl bg-white text-black placeholder:text-gray-500 focus:ring-2 focus:ring-black focus:border-black outline-none text-xl shadow-inner" />
-              </div>
-              <div className={repasAlert ? "relative" : ""}>
-                <label className="block text-lg font-bold text-black mb-2">Repas {repasAlert && "(>25€ !)"}</label>
-                <input type="number" step="0.01" min="0" {...step2Form.register("repas", { valueAsNumber: true })} className={`w-full p-4 border rounded-xl bg-white text-black placeholder:text-gray-500 focus:ring-2 focus:ring-black outline-none text-xl shadow-inner ${repasAlert ? "border-red-500 ring-2 ring-red-300 focus:border-red-500" : "border-gray-300 focus:border-black"}`} />
-                {step2Form.formState.errors.repas && <p className="text-red-600 mt-1">{step2Form.formState.errors.repas.message}</p>}
-              </div>
-              <div>
-                <label className="block text-lg font-bold text-black mb-2">Autres</label>
-                <input type="number" step="0.01" min="0" {...step2Form.register("autres", { valueAsNumber: true })} className="w-full p-4 border border-gray-300 rounded-xl bg-white text-black placeholder:text-gray-500 focus:ring-2 focus:ring-black focus:border-black outline-none text-xl shadow-inner" />
-              </div>
-            </div>
-            <div className="mt-12 p-8 bg-black text-white rounded-2xl text-center">
-              <div className="text-4xl font-bold mb-2">Total: €{total.toFixed(2)}</div>
-              <div className="text-lg opacity-90">Transport: €{(kmVoiture * 0.36 + kmMoto * 0.14 + kmCovoiturage * 0.40).toFixed(2)}</div>
-            </div>
-          </form>
-        );
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
 
-      case 3:
-        return (
-          <div className="space-y-6">
-            <div>
-              <label className="block text-lg font-bold text-black mb-3">Justificatifs (images/PDF)</label>
-              <input ref={fileInputRef} type="file" accept="image/*,application/pdf" multiple onChange={async (e) => {
-                for (let file of Array.from(e.target.files || [])) {
-                  const formData = new FormData();
-                  formData.append("file", file);
-                  const res = await fetch("/api/upload", { method: "POST", body: formData });
-                  const { url } = await res.json();
-                  addFile(url);
-                }
-              }} className="w-full p-4 border-2 border-dashed border-black rounded-xl hover:border-gray-900 cursor-pointer bg-white text-black" />
-            </div>
-            <button onClick={captureCamera} className="w-full p-4 bg-black text-white rounded-xl font-bold hover:bg-gray-900 shadow-xl hover:shadow-2xl transition-all">
-              📸 Capture caméra
-            </button>
-            <video ref={videoRef} className="hidden" autoPlay muted />
-            <canvas ref={canvasRef} className="hidden" />
-            {files.length > 0 && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {files.map((file, i) => (
-                  <div key={i} className="relative group">
-                    <img src={file} alt="Preview" className="w-full h-32 object-cover rounded-xl shadow-md" />
-                    <button onClick={() => removeFile(i)} className="absolute top-2 right-2 bg-red-500 text-white w-8 h-8 rounded-full opacity-0 group-hover:opacity-100 transition-all text-xs font-bold">×</button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <p className="text-lg font-bold text-black text-center">({files.length} fichier(s))</p>
-          </div>
-        );
+    try {
+      const res = await fetch('/api/expenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...form,
+          expenses: depenses.map((d, i) => ({
+            categorie: d.categorie,
+            description: d.description,
+            montant: Number(d.montant),
+            date_depense: d.date_depense,
+            ...(d.km ? { km: Number(d.km) } : {}),
+            ...(justificatifs[i]?.length ? { justificatif_urls: justificatifs[i] } : {}),
+          })),
+        }),
+      })
 
-      case 4:
-        return (
-          <div className="space-y-8">
-            <div className="bg-white p-6 rounded-xl shadow-md border space-y-4">
-              <h3 className="text-2xl font-bold text-black">1. Infos mission</h3>
-              <div className="grid md:grid-cols-2 gap-6 text-lg">
-                <div><span className="font-semibold text-black">Nom:</span> <span className="text-gray-800">{step1Form.watch("nom") || '-'}</span> <span className="text-gray-800">{step1Form.watch("prenom") || '-'}</span></div>
-                <div><span className="font-semibold text-black">Objet:</span> <span className="text-gray-800">{step1Form.watch("objet") || '-'}</span></div>
-                <div className="md:col-span-2"><span className="font-semibold text-black">Trajet:</span> <span className="text-gray-800">{step1Form.watch("villeDepart") || '-'} → {step1Form.watch("villeArrivee") || '-'} ({step1Form.watch("dateDebut") || '-'} au {step1Form.watch("dateFin") || '-'})</span></div>
-                <div><span className="font-semibold text-black">Contact:</span> <span className="text-gray-800">{step1Form.watch("telephone") || '-'}</span></div>
-              </div>
-            </div>
+      const data = await res.json()
 
-            <div className="bg-white p-6 rounded-xl shadow-md border space-y-4">
-              <h3 className="text-2xl font-bold text-black">2. Dépenses</h3>
-              <div className="text-black space-y-2 text-lg">
-                <div>Voiture: <span className="text-gray-800">{kmVoiture || 0}km = €{(kmVoiture*0.36 || 0).toFixed(2)}</span></div>
-                <div>Moto: <span className="text-gray-800">{kmMoto || 0}km = €{(kmMoto*0.14 || 0).toFixed(2)}</span></div>
-                <div>Covoiturage: <span className="text-gray-800">{kmCovoiturage || 0}km = €{(kmCovoiturage*0.40 || 0).toFixed(2)}</span></div>
-                <div>Hôtel: <span className="text-gray-800">€{hotel.toFixed(2)}</span></div>
-                <div>Repas: <span className="text-gray-800">€{repas.toFixed(2)}</span></div>
-                <div>Autres: <span className="text-gray-800">€{autres.toFixed(2)}</span></div>
-                <div className="pt-4 border-t border-gray-300 mt-4">
-                  <div className="text-3xl font-bold text-black flex justify-between">
-                    <span>TOTAL</span>
-                    <span>€{total.toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+      if (!data.success) {
+        setError(data.error || 'Erreur lors de la soumission')
+        return
+      }
 
-            <div className="bg-white p-6 rounded-xl shadow-md border space-y-4">
-              <h3 className="text-2xl font-bold text-black">3. Justificatifs</h3>
-              <p className="text-xl font-bold text-black">{files.length} fichier(s)</p>
-            </div>
-
-          </div>
-        );
-      default:
-        return null;
+      const params = new URLSearchParams({
+        ref: data.data.id,
+        montant: String(data.data.montant_total),
+        email: form.email,
+        prenom: form.prenom,
+        nom: form.nom,
+      })
+      router.push(`/confirmation?${params.toString()}`)
+    } catch {
+      setError('Erreur serveur, réessayez')
+    } finally {
+      setLoading(false)
     }
-  };
+  }
+
+  const inputStyle = {
+    width: '100%',
+    padding: '10px 12px',
+    border: '0.5px solid #d8e4a8',
+    borderRadius: '8px',
+    fontSize: '13px',
+    background: '#f4f8e8',
+    color: '#1a2e0a',
+    outline: 'none',
+  }
+
+  const labelStyle = {
+    display: 'block',
+    fontSize: '11px',
+    fontWeight: '500' as const,
+    color: '#5a6e3a',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    marginBottom: '6px',
+  }
+
+  const sectionTitle = {
+    fontSize: '12px',
+    fontWeight: '500' as const,
+    color: '#7a9420',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.08em',
+    marginBottom: '16px',
+  }
 
   return (
-    <main className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="max-w-4xl mx-auto bg-white rounded-3xl shadow-2xl">
-        <div className="bg-gradient-to-r from-black to-gray-900 p-1 mb-8">
-          <div className="h-2 bg-white rounded-full transition-all duration-500" style={{ width: `${(currentStep / 4) * 100}%` }} />
-        </div>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <Header />
 
-        <div className="px-8 pb-8 text-center border-b border-gray-300">
-          <h1 className="text-4xl md:text-5xl font-black text-black mb-4">Étape {currentStep}/4</h1>
-          <div className="text-xl text-black max-w-md mx-auto">
-            {currentStep === 1 && "Renseignez vos informations"}
-            {currentStep === 2 && "Saisissez vos dépenses"}
-            {currentStep === 3 && "Ajoutez vos justificatifs"}
-            {currentStep === 4 && "Vérifiez et soumettez"}
+      <main style={{ flex: 1, background: '#f4f8e8', padding: '32px 24px' }}>
+        <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+
+          <div style={{ marginBottom: '24px' }}>
+            <h1 style={{ fontSize: '22px', fontWeight: '500', color: '#1a2e0a', margin: 0 }}>Nouvelle note de frais</h1>
+            <p style={{ fontSize: '13px', color: '#5a6e3a', marginTop: '4px' }}>Remplissez le formulaire — calcul automatique selon les barèmes FFS 2026</p>
           </div>
-        </div>
 
-        <div className="px-8 pb-12">
-          {error && <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded-xl mb-8 font-bold">{error}</div>}
-          <div className="max-h-[60vh] overflow-y-auto">{StepContent()}</div>
-        </div>
+          <form onSubmit={handleSubmit}>
 
-        <div className="px-8 py-8 bg-gray-50 border-t border-gray-300 flex justify-between">
-          {currentStep > 1 && (
-            <button 
-              onClick={prevStep}
-              className="px-8 py-4 border border-black text-black rounded-xl font-bold hover:bg-black hover:text-white transition-all shadow-lg hover:shadow-xl"
-            >
-              ← Précédent
-            </button>
-          )}
-          <div />
-          {currentStep < 4 ? (
-            <button 
-              onClick={nextStep}
-              className="px-12 py-4 bg-black text-white rounded-xl font-bold text-lg hover:bg-gray-900 shadow-xl hover:shadow-2xl transition-all disabled:opacity-50"
+            {error && (
+              <div style={{ background: '#fef2f2', border: '0.5px solid #fca5a5', color: '#dc2626', padding: '10px 14px', borderRadius: '8px', fontSize: '13px', marginBottom: '20px' }}>
+                {error}
+              </div>
+            )}
+
+            {/* Informations personnelles */}
+            <div style={{ background: 'white', borderRadius: '12px', border: '0.5px solid #d8e4a8', padding: '24px', marginBottom: '16px' }}>
+              <div style={sectionTitle}>Informations personnelles</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                <div>
+                  <label style={labelStyle}>Prénom</label>
+                  <input name="prenom" value={form.prenom} onChange={handleFormChange} required placeholder="Jean" style={inputStyle}
+                    onFocus={e => (e.target.style.borderColor = '#A6C630')} onBlur={e => (e.target.style.borderColor = '#d8e4a8')} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Nom</label>
+                  <input name="nom" value={form.nom} onChange={handleFormChange} required placeholder="Dupont" style={inputStyle}
+                    onFocus={e => (e.target.style.borderColor = '#A6C630')} onBlur={e => (e.target.style.borderColor = '#d8e4a8')} />
+                </div>
+              </div>
+              <div style={{ marginBottom: '14px' }}>
+                <label style={labelStyle}>Adresse email</label>
+                <input type="email" name="email" value={form.email} onChange={handleFormChange} required placeholder="jean.dupont@exemple.com" style={inputStyle}
+                  onFocus={e => (e.target.style.borderColor = '#A6C630')} onBlur={e => (e.target.style.borderColor = '#d8e4a8')} />
+              </div>
+              <div>
+                <label style={labelStyle}>Commission</label>
+                <input name="commission" value={form.commission} onChange={handleFormChange} required placeholder="ex: Commission technique" style={inputStyle}
+                  onFocus={e => (e.target.style.borderColor = '#A6C630')} onBlur={e => (e.target.style.borderColor = '#d8e4a8')} />
+              </div>
+            </div>
+
+            {/* Informations de l'action */}
+            <div style={{ background: 'white', borderRadius: '12px', border: '0.5px solid #d8e4a8', padding: '24px', marginBottom: '16px' }}>
+              <div style={sectionTitle}>Informations de l'action</div>
+              <div style={{ marginBottom: '14px' }}>
+                <label style={labelStyle}>Objet / Action</label>
+                <input name="objet_action" value={form.objet_action} onChange={handleFormChange} required placeholder="ex: Réunion Lyon" style={inputStyle}
+                  onFocus={e => (e.target.style.borderColor = '#A6C630')} onBlur={e => (e.target.style.borderColor = '#d8e4a8')} />
+              </div>
+              <div style={{ marginBottom: '14px' }}>
+                <label style={labelStyle}>Date de l'action</label>
+                <input type="date" name="date_action" value={form.date_action} onChange={handleFormChange} required style={inputStyle}
+                  onFocus={e => (e.target.style.borderColor = '#A6C630')} onBlur={e => (e.target.style.borderColor = '#d8e4a8')} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div>
+                  <label style={labelStyle}>Ville de départ</label>
+                  <input name="ville_depart" value={form.ville_depart} onChange={handleFormChange} required placeholder="Paris" style={inputStyle}
+                    onFocus={e => (e.target.style.borderColor = '#A6C630')} onBlur={e => (e.target.style.borderColor = '#d8e4a8')} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Ville d'arrivée</label>
+                  <input name="ville_arrivee" value={form.ville_arrivee} onChange={handleFormChange} required placeholder="Lyon" style={inputStyle}
+                    onFocus={e => (e.target.style.borderColor = '#A6C630')} onBlur={e => (e.target.style.borderColor = '#d8e4a8')} />
+                </div>
+              </div>
+            </div>
+
+            {/* Dépenses */}
+            <div style={{ background: 'white', borderRadius: '12px', border: '0.5px solid #d8e4a8', padding: '24px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div style={sectionTitle}>Dépenses</div>
+                <button type="button" onClick={addDepense}
+                  style={{ background: '#e4f0b8', color: '#4a5c14', padding: '6px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: '500', border: '0.5px solid #A6C630', cursor: 'pointer' }}>
+                  + Ajouter
+                </button>
+              </div>
+
+              {depenses.map((dep, index) => (
+                <div key={index} style={{ background: '#f4f8e8', borderRadius: '10px', padding: '16px', marginBottom: '12px', border: '0.5px solid #d8e4a8' }}>
+
+                  {/* Header dépense */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: '500', color: '#7a9420' }}>Dépense {index + 1}</span>
+                    {depenses.length > 1 && (
+                      <button type="button" onClick={() => removeDepense(index)}
+                        style={{ background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', cursor: 'pointer' }}>
+                        Supprimer
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Catégorie + Date */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                    <div>
+                      <label style={labelStyle}>Catégorie</label>
+                      <select value={dep.categorie} onChange={e => handleDepenseChange(index, 'categorie', e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
+                        {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Date de la dépense</label>
+                      <input type="date" value={dep.date_depense} onChange={e => handleDepenseChange(index, 'date_depense', e.target.value)} required style={inputStyle}
+                        onFocus={e => (e.target.style.borderColor = '#A6C630')} onBlur={e => (e.target.style.borderColor = '#d8e4a8')} />
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={labelStyle}>Description</label>
+                    <input value={dep.description} onChange={e => handleDepenseChange(index, 'description', e.target.value)} required placeholder="ex: Trajet Paris-Lyon" style={inputStyle}
+                      onFocus={e => (e.target.style.borderColor = '#A6C630')} onBlur={e => (e.target.style.borderColor = '#d8e4a8')} />
+                  </div>
+
+                  {/* Montant + KM */}
+                  <div style={{ display: 'grid', gridTemplateColumns: dep.categorie === 'voiture' || dep.categorie === 'moto' ? '1fr 1fr' : '1fr', gap: '12px' }}>
+                    {(dep.categorie === 'voiture' || dep.categorie === 'moto') && (
+                      <div>
+                        <label style={labelStyle}>Kilomètres</label>
+                        <input type="number" min="0" value={dep.km || ''} onChange={e => handleDepenseChange(index, 'km', e.target.value)} style={inputStyle}
+                          onFocus={e => (e.target.style.borderColor = '#A6C630')} onBlur={e => (e.target.style.borderColor = '#d8e4a8')}
+                          placeholder="ex: 150" />
+                      </div>
+                    )}
+                    <div>
+                      <label style={labelStyle}>Montant (€)</label>
+                      <input
+                        type="number" min="0" step="0.01"
+                        value={dep.montant || ''}
+                        onChange={e => handleDepenseChange(index, 'montant', e.target.value)}
+                        required
+                        readOnly={dep.categorie === 'voiture' || dep.categorie === 'moto'}
+                        style={{
+                          ...inputStyle,
+                          ...(dep.categorie === 'voiture' || dep.categorie === 'moto'
+                            ? { background: '#e4f0b8', color: '#4a5c14', cursor: 'not-allowed' }
+                            : {})
+                        }}
+                        onFocus={e => { if (dep.categorie !== 'voiture' && dep.categorie !== 'moto') e.target.style.borderColor = '#A6C630' }}
+                        onBlur={e => (e.target.style.borderColor = '#d8e4a8')}
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Justificatifs — multiples */}
+                  <div style={{ marginTop: '12px' }}>
+                    <label style={labelStyle}>Justificatifs</label>
+
+                    {(justificatifs[index] || []).map((url, fileIndex) => (
+                      <div key={url} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#dcfce7', border: '0.5px solid #86efac', borderRadius: '6px', padding: '6px 10px', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '12px', color: '#166534', flex: 1 }}>
+                          ✓ Justificatif {fileIndex + 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeJustificatif(index, fileIndex)}
+                          style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '16px', lineHeight: 1, padding: '0 2px' }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,application/pdf"
+                      onChange={e => {
+                        const file = e.target.files?.[0]
+                        if (file) {
+                          handleUpload(index, file)
+                          e.target.value = ''
+                        }
+                      }}
+                      style={{ width: '100%', padding: '8px 12px', border: '0.5px solid #d8e4a8', borderRadius: '8px', fontSize: '13px', background: '#f4f8e8', cursor: 'pointer' }}
+                      capture="environment"
+                    />
+                    {uploadLoading[index] && (
+                      <div style={{ fontSize: '12px', color: '#7a9420', marginTop: '6px' }}>Upload en cours...</div>
+                    )}
+                  </div>
+
+                </div>
+              ))}
+            </div>
+
+            {/* Bouton soumettre */}
+            <button
+              type="submit"
               disabled={loading}
+              style={{ width: '100%', background: loading ? '#B3D280' : '#A6C630', color: '#1a2e0a', padding: '14px', borderRadius: '8px', fontSize: '15px', fontWeight: '500', border: 'none', cursor: loading ? 'not-allowed' : 'pointer' }}
             >
-              Suivant →
+              {loading ? 'Soumission en cours...' : 'Soumettre la note de frais'}
             </button>
-          ) : (
-            <button 
-              onClick={handleSubmit}
-              disabled={loading || total === 0}
-              className="px-12 py-4 bg-black text-white rounded-xl font-bold text-lg hover:bg-gray-900 shadow-xl hover:shadow-2xl transition-all disabled:opacity-50"
-            >
-              {loading ? "Soumission..." : `✅ Soumettre NDF (€{total.toFixed(2)})`}
-            </button>
-          )}
-        </div>
-      </div>
-    </main>
-  );
-}
 
+          </form>
+        </div>
+      </main>
+
+      <Footer />
+    </div>
+  )
+}

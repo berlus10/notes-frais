@@ -15,6 +15,7 @@ const BAREMES = {
 const expenseSchema = z.object({
   nom: z.string().min(1, 'Nom requis'),
   prenom: z.string().min(1, 'Prénom requis'),
+  email: z.string().email('Email invalide').optional(),
   commission: z.string().min(1, 'Commission requise'),
   objet_action: z.string().min(1, 'Objet requis'),
   date_action: z.string().min(1, 'Date requise'),
@@ -25,8 +26,9 @@ const expenseSchema = z.object({
     description: z.string().min(1, 'Description requise'),
     montant: z.number().positive('Montant invalide'),
     justificatif_url: z.string().optional(),
+    justificatif_urls: z.array(z.string()).optional(),
     date_depense: z.string().min(1, 'Date requise'),
-    km: z.number().optional(), // Pour voiture/moto
+    km: z.number().optional(),
   })),
 })
 
@@ -60,7 +62,7 @@ export async function POST(req: NextRequest) {
     const validation = expenseSchema.safeParse(body)
     if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: validation.error.errors[0].message },
+        { success: false, error: validation.error.issues[0].message },
         { status: 400 }
       )
     }
@@ -120,7 +122,9 @@ export async function POST(req: NextRequest) {
             description: e.description,
             montant: e.montant,
             montant_retenu: e.montant_retenu,
-            justificatif_url: e.justificatif_url ?? null,
+            justificatif_url: e.justificatif_urls?.length
+              ? JSON.stringify(e.justificatif_urls)
+              : (e.justificatif_url ?? null),
             date_depense: new Date(e.date_depense),
           })),
         },

@@ -1,116 +1,149 @@
-'use client';
+'use client'
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useState, useEffect } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import Header from '../components/Header'
+import Footer from '../components/Footer'
 
-interface Expense {
-  id: number;
-  ref: string;
-  objet: string;
-  total: number;
-  status: string;
-  createdAt: string;
+interface ExpenseReport {
+  id: string
+  commission: string
+  objet_action: string
+  date_action: string
+  ville_depart: string
+  ville_arrivee: string
+  montant_total: string
+  statut: string
+  submitted_at: string
+}
+
+const STATUT_LABELS: Record<string, { label: string; color: string; bg: string }> = {
+  draft:     { label: 'Brouillon',  color: '#5a6e3a', bg: '#e4f0b8' },
+  submitted: { label: 'En attente', color: '#92400e', bg: '#fef3c7' },
+  approved:  { label: 'Validée',    color: '#166534', bg: '#dcfce7' },
+  rejected:  { label: 'Rejetée',    color: '#991b1b', bg: '#fee2e2' },
+  paid:      { label: 'Remboursée', color: '#1e40af', bg: '#dbeafe' },
 }
 
 export default function Dashboard() {
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [loading, setLoading] = useState(true);
-  const searchParams = useSearchParams();
-  const userId = searchParams.get('userId') || localStorage.getItem('userId') || 'anonymous';
+  const [expenses, setExpenses] = useState<ExpenseReport[]>([])
+  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<any>(null)
+  const router = useRouter()
 
   useEffect(() => {
-    fetch(`/api/expenses?userId=${userId}`)
+    fetch('/api/auth/me')
       .then(res => res.json())
-      .then(setExpenses)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [userId]);
+      .then(data => {
+        if (!data.success) {
+          router.push('/login')
+          return
+        }
+        setUser(data.data)
+      })
+      .catch(() => router.push('/login'))
 
-  const SkeletonCard = () => (
-    <div className="cave-card p-6 rounded-2xl shadow-glow-card animate-pulse">
-      <div className="flex justify-between items-start">
-        <div>
-          <div className="h-6 bg-cave-border rounded w-32 mb-2"></div>
-          <div className="h-5 bg-cave-border rounded w-48"></div>
-        </div>
-        <div className="text-right">
-          <div className="h-8 bg-cave-border rounded w-20 mb-2 mx-auto"></div>
-          <div className="h-5 bg-cave-border rounded w-16 mx-auto"></div>
-        </div>
-      </div>
-      <div className="mt-4 pt-4 border-t border-cave-border flex justify-between items-center">
-        <div className="h-4 bg-cave-border rounded w-24"></div>
-        <div className="h-4 bg-cave-border rounded w-32"></div>
-      </div>
-    </div>
-  );
+    fetch('/api/expenses')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) setExpenses(data.data)
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [])
 
   return (
-    <div className="min-h-screen py-8 px-4 bg-cave-bg">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex justify-between items-center mb-12 cave-card p-8 rounded-2xl shadow-glow-card">
-          <h1 className="text-4xl font-black text-cave-text-100">Mes notes de frais</h1>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <Header />
 
-          <Link 
-            href="/nouvelle-ndf"
-            className="bg-accent text-cave-card px-8 py-4 rounded-xl font-bold shadow-glow-accent hover:shadow-glow-pulse hover:bg-accent-glow transition-all duration-300"
-          >
-            + Nouvelle NDF
-          </Link>
-        </div>
+      <main style={{ flex: 1, background: '#f4f8e8', padding: '32px 24px' }}>
+        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
 
-        {loading ? (
-          <div className="space-y-4">
-            <SkeletonCard />
-            <SkeletonCard />
-            <SkeletonCard />
-          </div>
-        ) : expenses.length === 0 ? (
-          <div className="text-center py-20 cave-card rounded-2xl shadow-glow-card">
-            <p className="text-2xl text-cave-text-400 mb-8">Aucune note de frais trouvée</p>
-            <Link 
+          {/* Titre */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+            <div>
+              <h1 style={{ fontSize: '22px', fontWeight: '500', color: '#1a2e0a', margin: 0 }}>
+                Mes notes de frais
+              </h1>
+              {user && (
+                <p style={{ fontSize: '13px', color: '#5a6e3a', marginTop: '4px' }}>
+                  Bonjour {user.prenom} {user.nom}
+                </p>
+              )}
+            </div>
+            <Link
               href="/nouvelle-ndf"
-              className="bg-accent text-cave-card px-8 py-4 rounded-xl font-bold shadow-glow-accent hover:shadow-glow-pulse hover:bg-accent-glow transition-all inline-block"
+              style={{ background: '#A6C630', color: '#1a2e0a', padding: '10px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: '500', textDecoration: 'none' }}
             >
-               Créer ma première NDF
+              + Nouvelle NDF
             </Link>
           </div>
-        ) : (
-          <div className="space-y-4">
-            {expenses.map(expense => (
-              <Link 
-                key={expense.id} 
-                href={`/ndf/${expense.id}`}
-                className="block hover:scale-[1.02] transition-all duration-300"
-              >
-                <div className="cave-card p-8 rounded-2xl shadow-glow-card hover:shadow-glow-accent cursor-pointer group">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h3 className="text-2xl font-black text-cave-text-100 group-hover:text-accent mb-2">{expense.ref}</h3>
-                      <p className="text-lg text-cave-text-400">{expense.objet || 'Note de frais'}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-3xl font-black text-cave-text-100 mb-3">€{expense.total.toFixed(2)}</p>
-                      <span className={`status-${expense.status.toLowerCase()} transition-all`}>
-                        {expense.status.charAt(0).toUpperCase() + expense.status.slice(1)}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="pt-4 border-t border-cave-border flex justify-between items-center text-sm text-cave-text-400">
-                    <span>{new Date(expense.createdAt).toLocaleDateString('fr-FR')}</span>
-                    <span>En attente validation</span>
-                  </div>
-                  <div className="mt-4 pt-4 border-t border-cave-border text-right">
-                    <span className="text-accent font-bold hover:underline transition-all">Voir détail →</span>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
+          {/* Contenu */}
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '60px', color: '#5a6e3a', fontSize: '14px' }}>
+              Chargement...
+            </div>
+          ) : expenses.length === 0 ? (
+            <div style={{ background: 'white', borderRadius: '12px', border: '0.5px solid #d8e4a8', padding: '60px 24px', textAlign: 'center' }}>
+              <p style={{ fontSize: '16px', color: '#5a6e3a', marginBottom: '20px' }}>
+                Vous n'avez pas encore de note de frais
+              </p>
+              <Link
+                href="/nouvelle-ndf"
+                style={{ background: '#A6C630', color: '#1a2e0a', padding: '12px 24px', borderRadius: '8px', fontSize: '14px', fontWeight: '500', textDecoration: 'none' }}
+              >
+                Créer ma première NDF
+              </Link>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {expenses.map(expense => {
+                const statut = STATUT_LABELS[expense.statut] || { label: expense.statut, color: '#5a6e3a', bg: '#e4f0b8' }
+                return (
+                  <Link
+                    key={expense.id}
+                    href={`/ndf/${expense.id}`}
+                    style={{ textDecoration: 'none' }}
+                  >
+                    <div style={{ background: 'white', borderRadius: '12px', border: '0.5px solid #d8e4a8', padding: '20px 24px', cursor: 'pointer', transition: 'border-color 0.2s' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div>
+                          <div style={{ fontSize: '15px', fontWeight: '500', color: '#1a2e0a', marginBottom: '4px' }}>
+                            {expense.objet_action}
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#5a6e3a' }}>
+                            {expense.commission} — {expense.ville_depart} → {expense.ville_arrivee}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '18px', fontWeight: '500', color: '#1a2e0a', marginBottom: '6px' }}>
+                            {Number(expense.montant_total).toFixed(2)} €
+                          </div>
+                          <span style={{ background: statut.bg, color: statut.color, padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '500' }}>
+                            {statut.label}
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '0.5px solid #d8e4a8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '12px', color: '#7a9420' }}>
+                          {new Date(expense.date_action).toLocaleDateString('fr-FR')}
+                        </span>
+                        <span style={{ fontSize: '12px', color: '#A6C630', fontWeight: '500' }}>
+                          Voir le détail →
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </main>
+
+      <Footer />
+    </div>
+  )
+}

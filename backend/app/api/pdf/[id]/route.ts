@@ -309,23 +309,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Vérifier JWT
     const { id } = await params
     const token = req.cookies.get('token')?.value
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: 'Non authentifié' },
-        { status: 401 }
-      )
-    }
-
-    const payload = verifyToken(token)
-    if (!payload) {
-      return NextResponse.json(
-        { success: false, error: 'Token invalide' },
-        { status: 401 }
-      )
-    }
+    const payload = token ? verifyToken(token) : null
 
     // Récupérer la NDF complète
     const report = await prisma.expenseReport.findUnique({
@@ -343,8 +329,8 @@ export async function GET(
       )
     }
 
-    // Vérifier droits : admin ou propriétaire
-    if (payload.role !== 'admin' && report.user_id !== payload.userId) {
+    // Vérifier droits : admin ou propriétaire (les soumissions anonymes sont accessibles par UUID)
+    if (payload && payload.role !== 'admin' && report.user_id && report.user_id !== payload.userId) {
       return NextResponse.json(
         { success: false, error: 'Accès interdit' },
         { status: 403 }
@@ -365,13 +351,15 @@ export async function GET(
     )
 
     // Sauvegarder en BDD
-    await prisma.pdfExport.create({
-      data: {
-        report_id: report.id,
-        pdf_url: pdfUrl,
-        generated_by: payload.userId,
-      },
-    })
+    if (payload?.userId) {
+      await prisma.pdfExport.create({
+        data: {
+          report_id: report.id,
+          pdf_url: pdfUrl,
+          generated_by: payload.userId,
+        },
+      })
+    }
 
     return NextResponse.json(
       { success: true, data: { pdf_url: pdfUrl } },

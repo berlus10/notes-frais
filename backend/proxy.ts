@@ -3,11 +3,21 @@ import { verifyToken } from '@/lib/auth'
 
 // Routes publiques (accessibles sans token)
 const PUBLIC_ROUTES = [
-  '/api/auth/login',
-  '/api/auth/register',
-  '/api/expenses',   // POST sans compte autorisé
+  '/',
   '/login',
   '/register',
+  '/nouvelle-ndf',
+  '/confirmation',
+  '/mot-de-passe-oublie',
+  '/reinitialiser-mot-de-passe',
+  '/api/auth/login',
+  '/api/auth/register',
+  '/api/auth/logout',
+  '/api/auth/me',
+  '/api/auth/forgot-password',
+  '/api/auth/reset-password',
+  '/api/expenses',
+  '/api/pdf',
 ]
 
 // Routes réservées aux admins

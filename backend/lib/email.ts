@@ -38,6 +38,25 @@ export async function sendEmailValidation(
   })
 }
 
+export async function sendEmailResetPassword(email: string, resetUrl: string) {
+  await resend.emails.send({
+    from: process.env.EMAIL_FROM!,
+    to: email,
+    subject: 'Réinitialisation de votre mot de passe — FFS/EFS',
+    html: `
+      <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto;">
+        <h2 style="color: #4a5c14;">Réinitialisation de mot de passe</h2>
+        <p>Vous avez demandé à réinitialiser votre mot de passe.</p>
+        <p>Cliquez sur le bouton ci-dessous (lien valable <strong>1 heure</strong>) :</p>
+        <a href="${resetUrl}" style="display:inline-block;background:#A6C630;color:#1a2e0a;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0;">
+          Réinitialiser mon mot de passe
+        </a>
+        <p style="font-size:12px;color:#888;">Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
+      </div>
+    `,
+  })
+}
+
 export async function sendEmailRejet(
   membreEmail: string,
   membreNom: string,

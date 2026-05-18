@@ -1,154 +1,222 @@
-'use client';
+'use client'
 
-import { useSearchParams, useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { useState } from "react";
+import { useState, Suspense } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
+import Header from '../components/Header'
+import Footer from '../components/Footer'
 
-const registerSchema = z.object({
-  nom: z.string().min(2, "Nom trop court"),
-  email: z.string().email("Email invalide"),
-  password: z.string().min(6, "Mot de passe ≥6 caractères"),
-});
+function ConfirmationContent() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
 
-type RegisterForm = z.infer<typeof registerSchema>;
+  const ref     = searchParams.get('ref') || ''
+  const montant = searchParams.get('montant') || '0'
+  const email   = searchParams.get('email') || ''
+  const prenom  = searchParams.get('prenom') || ''
+  const nom     = searchParams.get('nom') || ''
 
-export default function Confirmation() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [registerError, setRegisterError] = useState("");
+  const [pdfUrl, setPdfUrl]         = useState<string | null>(null)
+  const [pdfLoading, setPdfLoading] = useState(false)
+  const [pdfError, setPdfError]     = useState('')
 
-  const ref = searchParams.get("ref");
-  const userId = searchParams.get("userId") || "anonymous";
+  const [form, setForm] = useState({ prenom, nom, email, password: '' })
+  const [registerLoading, setRegisterLoading] = useState(false)
+  const [registerError, setRegisterError]     = useState('')
 
-  const form = useForm<RegisterForm>({
-    resolver: zodResolver(registerSchema),
-    defaultValues: { nom: "", email: "", password: "" },
-  });
+  const inputStyle = {
+    width: '100%',
+    padding: '10px 12px',
+    border: '0.5px solid #d8e4a8',
+    borderRadius: '8px',
+    fontSize: '13px',
+    background: '#f4f8e8',
+    color: '#1a2e0a',
+    outline: 'none',
+    boxSizing: 'border-box' as const,
+  }
 
-  const onSubmit = async (data: RegisterForm) => {
-    setLoading(true);
-    setRegisterError("");
+  const labelStyle = {
+    display: 'block',
+    fontSize: '11px',
+    fontWeight: '500' as const,
+    color: '#5a6e3a',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    marginBottom: '6px',
+  }
+
+  async function handleDownloadPDF() {
+    if (!ref) return
+    setPdfLoading(true)
+    setPdfError('')
     try {
-      const res = await fetch("/api/auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "register", ...data }),
-      });
-
-      if (!res.ok) {
-        throw new Error("Échec création compte");
+      const res  = await fetch(`/api/pdf/${ref}`)
+      const data = await res.json()
+      if (data.success) {
+        setPdfUrl(data.data.pdf_url)
+      } else {
+        setPdfError(data.error || 'Erreur lors de la génération du PDF')
       }
-
-      const { token, user } = await res.json();
-      localStorage.setItem("token", token);
-      localStorage.setItem("user", JSON.stringify(user));
-      router.push("/dashboard");
-    } catch (err) {
-      setRegisterError(err instanceof Error ? err.message : "Erreur");
+    } catch {
+      setPdfError('Erreur réseau, réessayez')
     } finally {
-      setLoading(false);
+      setPdfLoading(false)
     }
-  };
+  }
+
+  async function handleRegister(e: React.FormEvent) {
+    e.preventDefault()
+    setRegisterLoading(true)
+    setRegisterError('')
+    try {
+      const res  = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prenom: form.prenom,
+          nom: form.nom,
+          email: form.email,
+          password: form.password,
+          expense_report_id: ref,
+        }),
+      })
+      const data = await res.json()
+      if (!data.success) {
+        setRegisterError(data.error || 'Erreur lors de l\'inscription')
+        return
+      }
+      router.push('/dashboard')
+    } catch {
+      setRegisterError('Erreur serveur, réessayez')
+    } finally {
+      setRegisterLoading(false)
+    }
+  }
 
   if (!ref) {
-    router.push("/");
-    return null;
+    router.push('/')
+    return null
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-gray-50 to-white flex items-center justify-center p-4 py-12">
-      <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl border border-gray-200 p-8 space-y-8">
-        {/* Success Header */}
-        <div className="text-center border-b border-gray-200 pb-8">
-          <div className="w-20 h-20 bg-green-100 rounded-2xl mx-auto mb-6 flex items-center justify-center">
-            <svg className="w-12 h-12 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <h1 className="text-3xl font-black text-black mb-3">NDF soumise !</h1>
-          <p className="text-xl font-bold text-black mb-1">Référence:</p>
-          <p className="text-2xl font-black text-black bg-black text-white px-4 py-2 rounded-xl mx-auto max-w-xs">{ref}</p>
-          <p className="text-lg text-black mt-4">Votre demande est en attente de validation trésorier.</p>
-        </div>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <Header />
 
-        {/* Continue without account */}
-        <button 
-          onClick={() => router.push("/dashboard")}
-          className="w-full bg-black text-white py-4 px-6 rounded-2xl font-bold text-lg hover:bg-gray-900 shadow-xl hover:shadow-2xl transition-all"
-        >
-          Continuer au Dashboard
-        </button>
+      <main style={{ flex: 1, background: '#f4f8e8', padding: '32px 24px' }}>
+        <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-
-        {/* Or register separator */}
-        <div className="relative flex items-center py-6">
-          <div className="flex-grow border-t border-gray-300" />
-          <span className="flex-shrink mx-4 text-black font-bold px-4">ou</span>
-          <div className="flex-grow border-t border-gray-300" />
-        </div>
-
-        {/* Register form */}
-        <div>
-          <h3 className="text-xl font-bold text-black mb-6 text-center">Créez un compte pour suivre vos NDF</h3>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <div>
-              <label className="block text-lg font-bold text-black mb-3">Nom complet</label>
-              <input 
-                {...form.register("nom")}
-                className="w-full px-4 py-4 border border-gray-300 rounded-2xl text-lg font-semibold shadow-inner focus:outline-none focus:ring-4 focus:ring-black focus:border-black placeholder-gray-400"
-                placeholder="Dupont Martin"
-              />
-              {form.formState.errors.nom && <p className="text-red-600 text-sm mt-2">{form.formState.errors.nom.message}</p>}
+          {/* Succès */}
+          <div style={{ background: 'white', borderRadius: '12px', border: '0.5px solid #d8e4a8', padding: '28px 24px', textAlign: 'center' }}>
+            <div style={{ width: '52px', height: '52px', background: '#A6C630', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', fontSize: '22px' }}>✓</div>
+            <h1 style={{ fontSize: '20px', fontWeight: '500', color: '#1a2e0a', marginBottom: '6px' }}>Note de frais soumise !</h1>
+            <p style={{ fontSize: '13px', color: '#5a6e3a', marginBottom: '16px' }}>Le trésorier a été notifié et traitera votre demande.</p>
+            <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '2px', background: '#f4f8e8', border: '0.5px solid #d8e4a8', borderRadius: '8px', padding: '10px 20px' }}>
+              <span style={{ fontSize: '10px', color: '#7a9420', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Référence</span>
+              <span style={{ fontSize: '12px', fontFamily: 'monospace', color: '#1a2e0a' }}>{ref}</span>
             </div>
-            <div>
-              <label className="block text-lg font-bold text-black mb-3">Email</label>
-              <input 
-                type="email"
-                {...form.register("email")}
-                className="w-full px-4 py-4 border border-gray-300 rounded-2xl text-lg font-semibold shadow-inner focus:outline-none focus:ring-4 focus:ring-black focus:border-black placeholder-gray-400"
-                placeholder="martin@entreprise.com"
-              />
-              {form.formState.errors.email && <p className="text-red-600 text-sm mt-2">{form.formState.errors.email.message}</p>}
-            </div>
-            <div>
-              <label className="block text-lg font-bold text-black mb-3">Mot de passe</label>
-              <input 
-                type="password"
-                {...form.register("password")}
-                className="w-full px-4 py-4 border border-gray-300 rounded-2xl text-lg font-semibold shadow-inner focus:outline-none focus:ring-4 focus:ring-black focus:border-black placeholder-gray-400"
-                placeholder="Votre mot de passe"
-              />
-              {form.formState.errors.password && <p className="text-red-600 text-sm mt-2">{form.formState.errors.password.message}</p>}
-            </div>
-            {registerError && (
-              <div className="p-4 bg-red-100 border border-red-400 text-red-800 rounded-2xl text-sm font-bold text-center">
-                {registerError}
+            {Number(montant) > 0 && (
+              <div style={{ marginTop: '12px', fontSize: '15px', color: '#1a2e0a' }}>
+                Montant estimé : <strong>{Number(montant).toFixed(2)} €</strong>
               </div>
             )}
-            <button 
-              type="submit"
-              disabled={loading}
-              className="w-full bg-black text-white py-5 px-8 rounded-2xl font-bold text-xl hover:bg-gray-900 shadow-2xl hover:shadow-3xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {loading ? "Création..." : "Créer compte & Dashboard"}
-            </button>
-          </form>
-        </div>
+          </div>
 
-        {/* Back link */}
-        <p className="text-center">
-          <button 
-            onClick={() => router.push("/")}
-            className="text-black hover:underline font-semibold"
-          >
-            ← Nouvelle NDF
-          </button>
-        </p>
-      </div>
-    </main>
-  );
+          {/* PDF */}
+          <div style={{ background: 'white', borderRadius: '12px', border: '0.5px solid #d8e4a8', padding: '24px' }}>
+            <div style={{ fontSize: '11px', fontWeight: '500', color: '#7a9420', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '10px' }}>Récapitulatif PDF</div>
+            <p style={{ fontSize: '13px', color: '#5a6e3a', marginBottom: '14px' }}>Téléchargez le récapitulatif complet de votre note de frais.</p>
+
+            {pdfError && (
+              <div style={{ background: '#fef2f2', border: '0.5px solid #fca5a5', color: '#dc2626', padding: '10px 14px', borderRadius: '8px', fontSize: '13px', marginBottom: '12px' }}>
+                {pdfError}
+              </div>
+            )}
+
+            {pdfUrl ? (
+              <a
+                href={pdfUrl}
+                target="_blank"
+                rel="noreferrer"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: '#A6C630', color: '#1a2e0a', padding: '10px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: '500', textDecoration: 'none' }}
+              >
+                📄 Ouvrir le PDF
+              </a>
+            ) : (
+              <button
+                onClick={handleDownloadPDF}
+                disabled={pdfLoading}
+                style={{ background: pdfLoading ? '#B3D280' : '#A6C630', color: '#1a2e0a', padding: '10px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: '500', border: 'none', cursor: pdfLoading ? 'not-allowed' : 'pointer' }}
+              >
+                {pdfLoading ? 'Génération...' : '📄 Générer et télécharger le PDF'}
+              </button>
+            )}
+          </div>
+
+          {/* Création de compte */}
+          <div style={{ background: 'white', borderRadius: '12px', border: '0.5px solid #d8e4a8', padding: '24px' }}>
+            <div style={{ fontSize: '11px', fontWeight: '500', color: '#7a9420', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Suivre votre remboursement</div>
+            <p style={{ fontSize: '13px', color: '#5a6e3a', marginBottom: '18px' }}>Créez un compte pour accéder à votre espace membres et suivre l'état de votre remboursement en temps réel.</p>
+
+            <form onSubmit={handleRegister}>
+              {registerError && (
+                <div style={{ background: '#fef2f2', border: '0.5px solid #fca5a5', color: '#dc2626', padding: '10px 14px', borderRadius: '8px', fontSize: '13px', marginBottom: '14px' }}>
+                  {registerError}
+                </div>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div>
+                  <label style={labelStyle}>Prénom</label>
+                  <input value={form.prenom} onChange={e => setForm({ ...form, prenom: e.target.value })} required placeholder="Jean" style={inputStyle}
+                    onFocus={e => (e.target.style.borderColor = '#A6C630')} onBlur={e => (e.target.style.borderColor = '#d8e4a8')} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Nom</label>
+                  <input value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} required placeholder="Dupont" style={inputStyle}
+                    onFocus={e => (e.target.style.borderColor = '#A6C630')} onBlur={e => (e.target.style.borderColor = '#d8e4a8')} />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '12px' }}>
+                <label style={labelStyle}>Email</label>
+                <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} required placeholder="jean.dupont@exemple.com" style={inputStyle}
+                  onFocus={e => (e.target.style.borderColor = '#A6C630')} onBlur={e => (e.target.style.borderColor = '#d8e4a8')} />
+              </div>
+
+              <div style={{ marginBottom: '18px' }}>
+                <label style={labelStyle}>Mot de passe</label>
+                <input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required placeholder="Minimum 8 caractères" style={inputStyle}
+                  onFocus={e => (e.target.style.borderColor = '#A6C630')} onBlur={e => (e.target.style.borderColor = '#d8e4a8')} />
+              </div>
+
+              <button
+                type="submit"
+                disabled={registerLoading}
+                style={{ width: '100%', background: registerLoading ? '#B3D280' : '#A6C630', color: '#1a2e0a', padding: '12px', borderRadius: '8px', fontSize: '14px', fontWeight: '500', border: 'none', cursor: registerLoading ? 'not-allowed' : 'pointer' }}
+              >
+                {registerLoading ? 'Création...' : 'Créer mon compte'}
+              </button>
+            </form>
+
+            <div style={{ textAlign: 'center', marginTop: '14px', paddingTop: '14px', borderTop: '0.5px solid #d8e4a8', fontSize: '13px', color: '#5a6e3a' }}>
+              Déjà un compte ?{' '}
+              <Link href="/login" style={{ color: '#7a9420', fontWeight: '500', textDecoration: 'none' }}>Se connecter</Link>
+            </div>
+          </div>
+
+        </div>
+      </main>
+
+      <Footer />
+    </div>
+  )
 }
 
+export default function Confirmation() {
+  return (
+    <Suspense>
+      <ConfirmationContent />
+    </Suspense>
+  )
+}
